@@ -4,16 +4,18 @@ import MaterialBrowser from "./pages/MaterialBrowser";
 import MaterialDetail from "./pages/MaterialDetail";
 import BomExplorer from "./pages/BomExplorer";
 import ProductionPlanner from "./pages/ProductionPlanner";
-import FinalProducts from "./pages/FinalProducts";
-import RawMaterials from "./pages/RawMaterials";
+import DatabaseBrowser from "./pages/DatabaseBrowser";
+import ScrapExplorer from "./pages/ScrapExplorer";
+import DataManagement from "./pages/DataManagement";
 
 const NAV = [
-  { to: "/",              label: "Dashboard",        icon: "⬡" },
-  { to: "/materials",     label: "Materials",        icon: "◈" },
-  { to: "/bom",           label: "BOM Explorer",     icon: "⬡" },
-  { to: "/planner",       label: "Planner",          icon: "⚙" },
-  { to: "/final-products",label: "Final Products",   icon: "★" },
-  { to: "/raw-materials", label: "Raw Materials",    icon: "◇" },
+  { to: "/",               label: "Dashboard",        icon: "⬡" },
+  { to: "/materials",      label: "Materials",        icon: "◈" },
+  { to: "/bom",            label: "BOM Explorer",     icon: "⬡" },
+  { to: "/planner",        label: "Planner",          icon: "⚙" },
+  { to: "/scrap",          label: "Scrap Explorer",   icon: "⚠" },
+  { to: "/db",             label: "DB Browser",       icon: "⊞" },
+  { to: "/data",           label: "Data Management",  icon: "↑" },
 ];
 
 export default function App() {
@@ -36,14 +38,15 @@ export default function App() {
       </aside>
       <main className="page">
         <Routes>
-          <Route path="/"               element={<Dashboard />} />
-          <Route path="/materials"      element={<MaterialBrowser />} />
-          <Route path="/materials/:id"  element={<MaterialDetail />} />
-          <Route path="/bom"            element={<BomExplorer />} />
-          <Route path="/bom/:id"        element={<BomExplorer />} />
-          <Route path="/planner"        element={<ProductionPlanner />} />
-          <Route path="/final-products" element={<FinalProducts />} />
-          <Route path="/raw-materials"  element={<RawMaterials />} />
+          <Route path="/"                element={<Dashboard />} />
+          <Route path="/materials"       element={<MaterialBrowser />} />
+          <Route path="/materials/:id"   element={<MaterialDetail />} />
+          <Route path="/bom"             element={<BomExplorer />} />
+          <Route path="/bom/:id"         element={<BomExplorer />} />
+          <Route path="/planner"         element={<ProductionPlanner />} />
+          <Route path="/scrap"           element={<ScrapExplorer />} />
+          <Route path="/db"              element={<DatabaseBrowser />} />
+          <Route path="/data"            element={<DataManagement />} />
         </Routes>
       </main>
     </div>

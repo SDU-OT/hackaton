@@ -7,9 +7,10 @@ from resolvers import routing as rou_res
 from resolvers import planner as plan_res
 from resolvers import scrap as scrap_res
 from resolvers import dashboard as dash_res
+from resolvers import data_manager as dm_res
 
 
-# ── Types ────────────────────────────────────────────────────────────────────
+# ── Core material types ───────────────────────────────────────────────────────
 
 @strawberry.type
 class MaterialType:
@@ -29,6 +30,12 @@ class MaterialType:
 class MaterialSearchResult:
     items: List[MaterialType]
     total: int
+
+
+@strawberry.type
+class MaterialCatalogFilters:
+    material_types: List[str]
+    mrp_controllers: List[str]
 
 
 @strawberry.type
@@ -102,38 +109,6 @@ class ProductionPlan:
 
 
 @strawberry.type
-class FinalProduct:
-    material: str
-    description: Optional[str]
-    material_type: Optional[str]
-    status: Optional[str]
-    total_ordered: int
-    total_scrap: int
-    scrap_rate_pct: float
-    routing_op_count: int
-
-
-@strawberry.type
-class FinalProductsResult:
-    items: List[FinalProduct]
-    total: int
-
-
-@strawberry.type
-class RawMaterial:
-    material: str
-    description: Optional[str]
-    material_type: Optional[str]
-    used_in_bom_count: int
-
-
-@strawberry.type
-class RawMaterialsResult:
-    items: List[RawMaterial]
-    total: int
-
-
-@strawberry.type
 class ScrapStat:
     material: str
     description: Optional[str]
@@ -142,6 +117,8 @@ class ScrapStat:
     total_scrap: int
     total_delivered: int
     scrap_rate_pct: float
+    avg_std_price: Optional[float]
+    total_scrap_cost: Optional[float]
 
 
 @strawberry.type
@@ -177,38 +154,106 @@ class DashboardStats:
     top_scrap_materials: List[TopScrapMaterial]
 
 
-# ── Helpers ──────────────────────────────────────────────────────────────────
+# ── Scrap chain / Sankey types ────────────────────────────────────────────────
+
+@strawberry.type
+class ScrapChainItem:
+    component: str
+    description: Optional[str]
+    depth: int
+    path_str: str
+    qty_per_scrapped_unit: float
+    total_qty_wasted: float
+    machine_min_wasted: float
+    labor_min_wasted: float
+    estimated_cost: Optional[float]
+
+
+@strawberry.type
+class SankeyNode:
+    id: str
+    label: str
+    value: float
+
+
+@strawberry.type
+class SankeyLink:
+    source: str
+    target: str
+    value: float
+
+
+@strawberry.type
+class ScrapSankeyData:
+    nodes: List[SankeyNode]
+    links: List[SankeyLink]
+
+
+# ── Database browser types ────────────────────────────────────────────────────
+
+@strawberry.type
+class DbTable:
+    name: str
+    row_count: int
+    columns: List[str]
+
+
+@strawberry.type
+class TablePreview:
+    table_name: str
+    columns: List[str]
+    rows: List[List[str]]
+    total: int
+
+
+@strawberry.type
+class ImportedDataset:
+    name: str
+    source_file: str
+    table_name: str
+    row_count: int
+    imported_at: str
+
+
+@strawberry.type
+class ImportResult:
+    name: str
+    table_name: str
+    row_count: int
+
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _to_material(d) -> MaterialType:
     return MaterialType(**d)
 
-
 def _to_bom_item(d) -> BomItem:
     return BomItem(**d)
-
 
 def _to_explosion_item(d) -> BomExplosionItem:
     return BomExplosionItem(**d)
 
-
 def _to_routing_op(d) -> RoutingOperation:
     return RoutingOperation(**d)
 
-
 def _to_plan_component(d) -> ProductionPlanComponent:
-    return ProductionPlanComponent(**d)
-
-
-def _to_final_product(d) -> FinalProduct:
-    return FinalProduct(**d)
-
-
-def _to_raw_material(d) -> RawMaterial:
-    return RawMaterial(**d)
-
+    return ProductionPlanComponent(
+        component=d["component"],
+        description=d.get("description"),
+        material_type=d.get("material_type"),
+        material_group=d.get("material_group"),
+        unit=d.get("unit", ""),
+        total_quantity=d.get("total_quantity", 0.0),
+        depth=d.get("depth", 0),
+        total_machine_min=d.get("total_machine_min", 0.0),
+        total_labor_min=d.get("total_labor_min", 0.0),
+    )
 
 def _to_scrap_stat(d) -> ScrapStat:
     return ScrapStat(**d)
+
+def _to_scrap_chain_item(d) -> ScrapChainItem:
+    return ScrapChainItem(**d)
 
 
 # ── Query ────────────────────────────────────────────────────────────────────
@@ -222,11 +267,27 @@ class Query:
         query: str = "",
         limit: int = 20,
         offset: int = 0,
+        material_type: str = "",
+        mrp_controller: str = "",
     ) -> MaterialSearchResult:
-        result = mat_res.search_materials(query, limit, offset)
+        result = mat_res.search_materials(
+            query,
+            limit,
+            offset,
+            material_type,
+            mrp_controller,
+        )
         return MaterialSearchResult(
             items=[_to_material(m) for m in result["items"]],
             total=result["total"],
+        )
+
+    @strawberry.field
+    def material_catalog_filters(self) -> MaterialCatalogFilters:
+        f = mat_res.get_material_catalog_filters()
+        return MaterialCatalogFilters(
+            material_types=f["material_types"],
+            mrp_controllers=f["mrp_controllers"],
         )
 
     @strawberry.field
@@ -265,26 +326,6 @@ class Query:
         )
 
     @strawberry.field
-    def final_products(
-        self, limit: int = 50, offset: int = 0, search: str = ""
-    ) -> FinalProductsResult:
-        result = mat_res.get_final_products(limit, offset, search)
-        return FinalProductsResult(
-            items=[_to_final_product(r) for r in result["items"]],
-            total=result["total"],
-        )
-
-    @strawberry.field
-    def raw_materials(
-        self, limit: int = 50, offset: int = 0, search: str = ""
-    ) -> RawMaterialsResult:
-        result = mat_res.get_raw_materials(limit, offset, search)
-        return RawMaterialsResult(
-            items=[_to_raw_material(r) for r in result["items"]],
-            total=result["total"],
-        )
-
-    @strawberry.field
     def scrap_stats(self, limit: int = 100, offset: int = 0) -> List[ScrapStat]:
         return [_to_scrap_stat(r) for r in scrap_res.get_scrap_stats(limit, offset)]
 
@@ -306,5 +347,61 @@ class Query:
             top_scrap_materials=[TopScrapMaterial(**t) for t in d["top_scrap_materials"]],
         )
 
+    @strawberry.field
+    def scrap_chain(self, material_id: str) -> List[ScrapChainItem]:
+        return [_to_scrap_chain_item(r) for r in scrap_res.get_scrap_chain(material_id)]
 
-schema = strawberry.Schema(query=Query)
+    @strawberry.field
+    def aggregate_scrap_sankey(self) -> ScrapSankeyData:
+        d = scrap_res.get_aggregate_scrap_sankey()
+        return ScrapSankeyData(
+            nodes=[SankeyNode(**n) for n in d["nodes"]],
+            links=[SankeyLink(**l) for l in d["links"]],
+        )
+
+    @strawberry.field
+    def db_tables(self) -> List[DbTable]:
+        return [DbTable(**t) for t in dm_res.get_db_tables()]
+
+    @strawberry.field
+    def table_preview(
+        self,
+        table_name: str,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> TablePreview:
+        d = dm_res.get_table_preview(table_name, limit, offset)
+        return TablePreview(
+            table_name=d["table_name"],
+            columns=d["columns"],
+            rows=d["rows"],
+            total=d["total"],
+        )
+
+    @strawberry.field
+    def imported_datasets(self) -> List[ImportedDataset]:
+        return [ImportedDataset(**ds) for ds in dm_res.get_imported_datasets()]
+
+
+# ── Mutation ──────────────────────────────────────────────────────────────────
+
+@strawberry.type
+class Mutation:
+
+    @strawberry.mutation
+    def import_dataset(
+        self,
+        name: str,
+        csv_content: str,
+        target_table: str,
+        column_mapping: str = "{}",
+    ) -> ImportResult:
+        r = dm_res.do_import_dataset(name, csv_content, target_table, column_mapping)
+        return ImportResult(**r)
+
+    @strawberry.mutation
+    def remove_dataset(self, name: str) -> bool:
+        return dm_res.do_remove_dataset(name)
+
+
+schema = strawberry.Schema(query=Query, mutation=Mutation)

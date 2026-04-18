@@ -16,6 +16,11 @@ export interface MaterialSearchResult {
   total: number;
 }
 
+export interface MaterialCatalogFilters {
+  materialTypes: string[];
+  mrpControllers: string[];
+}
+
 export interface BomItem {
   parent: string;
   component: string;
@@ -33,6 +38,7 @@ export interface BomExplosionItem {
   component: string;
   description?: string | null;
   materialType?: string | null;
+  materialGroup?: string | null;
   mrpController?: string | null;
   unit: string;
   qtyPerParent: number;
@@ -80,34 +86,6 @@ export interface ProductionPlan {
   maxDepthReached: number;
 }
 
-export interface FinalProductsResult {
-  items: FinalProduct[];
-  total: number;
-}
-
-export interface RawMaterialsResult {
-  items: RawMaterial[];
-  total: number;
-}
-
-export interface FinalProduct {
-  material: string;
-  description?: string | null;
-  materialType?: string | null;
-  status?: string | null;
-  totalOrdered: number;
-  totalScrap: number;
-  scrapRatePct: number;
-  routingOpCount: number;
-}
-
-export interface RawMaterial {
-  material: string;
-  description?: string | null;
-  materialType?: string | null;
-  usedInBomCount: number;
-}
-
 export interface ScrapStat {
   material: string;
   description?: string | null;
@@ -116,6 +94,8 @@ export interface ScrapStat {
   totalScrap: number;
   totalDelivered: number;
   scrapRatePct: number;
+  avgStdPrice?: number | null;
+  totalScrapCost?: number | null;
 }
 
 export interface TypeDistribution {
@@ -145,4 +125,60 @@ export interface DashboardStats {
   typeDistribution: TypeDistribution[];
   topComplexMaterials: TopMaterial[];
   topScrapMaterials: TopScrapMaterial[];
+}
+
+export interface ScrapChainItem {
+  component: string;
+  description?: string | null;
+  depth: number;
+  pathStr: string;
+  qtyPerScrappedUnit: number;
+  totalQtyWasted: number;
+  machineMinWasted: number;
+  laborMinWasted: number;
+  estimatedCost?: number | null;
+}
+
+export interface SankeyNode {
+  id: string;
+  label: string;
+  value: number;
+}
+
+export interface SankeyLink {
+  source: string;
+  target: string;
+  value: number;
+}
+
+export interface ScrapSankeyData {
+  nodes: SankeyNode[];
+  links: SankeyLink[];
+}
+
+export interface DbTable {
+  name: string;
+  rowCount: number;
+  columns: string[];
+}
+
+export interface TablePreview {
+  tableName: string;
+  columns: string[];
+  rows: string[][];
+  total: number;
+}
+
+export interface ImportedDataset {
+  name: string;
+  sourceFile: string;
+  tableName: string;
+  rowCount: number;
+  importedAt: string;
+}
+
+export interface ImportResult {
+  name: string;
+  tableName: string;
+  rowCount: number;
 }

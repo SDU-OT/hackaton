@@ -205,3 +205,9 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Db
+backend/hackaton.db
+backend/hackaton.db-wal
+backend/hackaton.db-shm
+backend/hackaton.db*

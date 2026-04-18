@@ -249,6 +249,26 @@ a:hover { text-decoration: underline; }
   font-size: .66rem;
   margin-top: .12rem;
 }
+/* Bus bar node */
+.mrp-bus-node {
+  width: 100%;
+  height: 100%;
+  border-radius: 4px;
+  cursor: default;
+}
+
+.react-flow__node-mrpBus.selected .mrp-bus-node,
+.react-flow__node-mrpBus:focus .mrp-bus-node {
+  outline: none;
+  box-shadow: none;
+}
+
+.react-flow__node-mrpBus .bom-handle {
+  width: 6px;
+  height: 6px;
+  opacity: 0;
+}
+
 .mrp-chip-btn {
   outline: none;
   box-shadow: none;

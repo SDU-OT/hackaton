@@ -5,8 +5,6 @@ export const client = new ApolloClient({
   cache: new InMemoryCache({
     typePolicies: {
       MaterialType: { keyFields: ["material"] },
-      FinalProduct:  { keyFields: ["material"] },
-      RawMaterial:   { keyFields: ["material"] },
     },
   }),
   defaultOptions: {

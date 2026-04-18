@@ -1,8 +1,20 @@
 import { gql } from "@apollo/client";
 
 export const SEARCH_MATERIALS = gql`
-  query SearchMaterials($query: String!, $limit: Int, $offset: Int) {
-    searchMaterials(query: $query, limit: $limit, offset: $offset) {
+  query SearchMaterials(
+    $query: String
+    $limit: Int
+    $offset: Int
+    $materialType: String
+    $mrpController: String
+  ) {
+    searchMaterials(
+      query: $query
+      limit: $limit
+      offset: $offset
+      materialType: $materialType
+      mrpController: $mrpController
+    ) {
       total
       items {
         material
@@ -14,6 +26,15 @@ export const SEARCH_MATERIALS = gql`
         hasRouting
         weightKg
       }
+    }
+  }
+`;
+
+export const GET_MATERIAL_CATALOG_FILTERS = gql`
+  query GetMaterialCatalogFilters {
+    materialCatalogFilters {
+      materialTypes
+      mrpControllers
     }
   }
 `;
@@ -57,6 +78,7 @@ export const GET_BOM_EXPLOSION = gql`
       component
       description
       materialType
+      materialGroup
       mrpController
       unit
       qtyPerParent
@@ -110,38 +132,6 @@ export const GET_PRODUCTION_PLAN = gql`
   }
 `;
 
-export const GET_FINAL_PRODUCTS = gql`
-  query GetFinalProducts($limit: Int, $offset: Int, $search: String) {
-    finalProducts(limit: $limit, offset: $offset, search: $search) {
-      total
-      items {
-        material
-        description
-        materialType
-        status
-        totalOrdered
-        totalScrap
-        scrapRatePct
-        routingOpCount
-      }
-    }
-  }
-`;
-
-export const GET_RAW_MATERIALS = gql`
-  query GetRawMaterials($limit: Int, $offset: Int, $search: String) {
-    rawMaterials(limit: $limit, offset: $offset, search: $search) {
-      total
-      items {
-        material
-        description
-        materialType
-        usedInBomCount
-      }
-    }
-  }
-`;
-
 export const GET_SCRAP_STATS = gql`
   query GetScrapStats($limit: Int) {
     scrapStats(limit: $limit) {
@@ -152,6 +142,8 @@ export const GET_SCRAP_STATS = gql`
       totalScrap
       totalDelivered
       scrapRatePct
+      avgStdPrice
+      totalScrapCost
     }
   }
 `;
@@ -179,6 +171,102 @@ export const GET_DASHBOARD_STATS = gql`
         totalScrap
         scrapRatePct
       }
+    }
+  }
+`;
+
+export const GET_SCRAP_CHAIN = gql`
+  query GetScrapChain($materialId: String!) {
+    scrapChain(materialId: $materialId) {
+      component
+      description
+      depth
+      pathStr
+      qtyPerScrappedUnit
+      totalQtyWasted
+      machineMinWasted
+      laborMinWasted
+      estimatedCost
+    }
+  }
+`;
+
+export const GET_AGGREGATE_SCRAP_SANKEY = gql`
+  query GetAggregateScrapSankey {
+    aggregateScrapSankey {
+      nodes {
+        id
+        label
+        value
+      }
+      links {
+        source
+        target
+        value
+      }
+    }
+  }
+`;
+
+export const GET_DB_TABLES = gql`
+  query GetDbTables {
+    dbTables {
+      name
+      rowCount
+      columns
+    }
+  }
+`;
+
+export const GET_TABLE_PREVIEW = gql`
+  query GetTablePreview($tableName: String!, $limit: Int, $offset: Int) {
+    tablePreview(tableName: $tableName, limit: $limit, offset: $offset) {
+      tableName
+      columns
+      rows
+      total
+    }
+  }
+`;
+
+export const GET_IMPORTED_DATASETS = gql`
+  query GetImportedDatasets {
+    importedDatasets {
+      name
+      sourceFile
+      tableName
+      rowCount
+      importedAt
+    }
+  }
+`;
+
+export const IMPORT_DATASET = gql`
+  mutation ImportDataset($name: String!, $csvContent: String!, $targetTable: String!, $columnMapping: String) {
+    importDataset(name: $name, csvContent: $csvContent, targetTable: $targetTable, columnMapping: $columnMapping) {
+      name
+      tableName
+      rowCount
+    }
+  }
+`;
+
+export const REMOVE_DATASET = gql`
+  mutation RemoveDataset($name: String!) {
+    removeDataset(name: $name)
+  }
+`;
+
+export const GET_MATERIAL_SCRAP = gql`
+  query GetMaterialScrap($materialId: String!) {
+    materialScrap(materialId: $materialId) {
+      material
+      totalOrdered
+      totalScrap
+      totalDelivered
+      scrapRatePct
+      avgStdPrice
+      totalScrapCost
     }
   }
 `;
