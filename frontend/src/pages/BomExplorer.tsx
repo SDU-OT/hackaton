@@ -4,13 +4,14 @@ import { useQuery } from "@apollo/client/react";
 import ReactFlow, {
   BaseEdge,
   Background,
+  ConnectionMode,
   Controls,
   EdgeLabelRenderer,
   Handle,
   MiniMap,
   Position,
   MarkerType,
-  getBezierPath,
+  getSmoothStepPath,
   type Node,
   type Edge,
   type EdgeProps,
@@ -25,10 +26,15 @@ const NODE_H = 72;
 const GROUP_PAD_X = 40;
 const GROUP_PAD_TOP = 38;
 const GROUP_PAD_BOTTOM = 24;
-const GROUP_COLUMN_GAP = 76;
-const LEVEL_ROW_GAP = 44;
-const LEVEL_NODE_GAP = 24;
-const ROOT_TO_LEVEL_GAP = 90;
+const GROUP_COLUMN_GAP = 130;
+const LEVEL_ROW_GAP = 172;
+const LEVEL_NODE_GAP = 41;
+const ROOT_TO_LEVEL_GAP = 300;
+const BUS_NODE_SIZE = 10;
+const BUS_OFFSET_X = 34;
+const MATERIAL_BUS_OFFSET_Y = 36;
+const MRP_HUB_OFFSET_Y = BUS_NODE_SIZE / 2;
+const MRP_BUS_OFFSET_Y = 64;
 const MAX_NODES = 600;
 
 function getMrpLabel(value: unknown) {
@@ -130,6 +136,35 @@ function MrpGroupNodeComponent({ data }: { data: Record<string, unknown> }) {
   );
 }
 
+function BusJointNodeComponent({ data }: { data: Record<string, unknown> }) {
+  const dimmed = Boolean(data.dimmed);
+  const color = typeof data.color === "string" ? data.color : "var(--accent)";
+  const hidden = Boolean(data.hidden);
+  const hiddenHandleStyle = {
+    width: 2,
+    height: 2,
+    opacity: 0,
+    border: "none",
+    background: "transparent",
+  } as const;
+
+  return (
+    <>
+      <Handle id="t-top" type="target" position={Position.Top} isConnectable={false} style={hiddenHandleStyle} />
+      <Handle id="s-top" type="source" position={Position.Top} isConnectable={false} style={hiddenHandleStyle} />
+      <div
+        className="bom-bus-node"
+        style={{
+          background: hidden ? "transparent" : (dimmed ? "#4b4f62" : color),
+          opacity: hidden ? 0 : (dimmed ? 0.35 : 0.95),
+        }}
+      />
+      <Handle id="t-bottom" type="target" position={Position.Bottom} isConnectable={false} style={hiddenHandleStyle} />
+      <Handle id="s-bottom" type="source" position={Position.Bottom} isConnectable={false} style={hiddenHandleStyle} />
+    </>
+  );
+}
+
 function BomEdge({
   id,
   sourceX,
@@ -143,14 +178,15 @@ function BomEdge({
   label,
 }: EdgeProps) {
   const edgeLabel = String(label ?? "").trim();
-  const [edgePath, labelX, labelY] = getBezierPath({
+  const [edgePath, labelX, labelY] = getSmoothStepPath({
     sourceX,
     sourceY,
     targetX,
     targetY,
     sourcePosition,
     targetPosition,
-    curvature: 0.35,
+    borderRadius: 18,
+    offset: 18,
   });
 
   return (
@@ -172,7 +208,11 @@ function BomEdge({
   );
 }
 
-const nodeTypes = { bomNode: BomNodeComponent, mrpGroup: MrpGroupNodeComponent };
+const nodeTypes = {
+  bomNode: BomNodeComponent,
+  mrpGroup: MrpGroupNodeComponent,
+  busJoint: BusJointNodeComponent,
+};
 const edgeTypes = { bomEdge: BomEdge };
 
 export default function BomExplorer() {
@@ -290,20 +330,29 @@ export default function BomExplorer() {
 
     const tooLarge = nodeMap.size > MAX_NODES;
     const nodeArr = Array.from(nodeMap.values()).slice(0, MAX_NODES);
+    const rootGroupId = `mrp:0:${rootMrpLabel}`;
+    const materialGroupNodeById = new Map<string, string>();
+
     const rootNode = nodeArr.find((node) => node.data?.isRoot);
     const nonRootNodes = nodeArr.filter((node) => !node.data?.isRoot);
 
-    const groupBuckets = new Map<string, Node[]>();
+    const groupBuckets = new Map<string, { id: string; mrp: string; level: number; nodes: Node[] }>();
     for (const node of nonRootNodes) {
       const mrp = getMrpLabel(node.data?.mrpController);
-      if (!groupBuckets.has(mrp)) groupBuckets.set(mrp, []);
-      groupBuckets.get(mrp)!.push(node);
+      const rawDepth = Number(node.data?.depth ?? 1);
+      const level = Number.isFinite(rawDepth) && rawDepth > 0 ? rawDepth : 1;
+      const key = `${level}::${mrp}`;
+      if (!groupBuckets.has(key)) {
+        groupBuckets.set(key, { id: `mrp:${level}:${mrp}`, mrp, level, nodes: [] });
+      }
+      groupBuckets.get(key)!.nodes.push(node);
     }
 
     const groupNodes: Node[] = [];
-    const sortedGroups = Array.from(groupBuckets.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+    const sortedGroups = Array.from(groupBuckets.values())
+      .sort((a, b) => a.level - b.level || a.mrp.localeCompare(b.mrp));
 
-    const allLabels = Array.from(new Set([...sortedGroups.map(([label]) => label), rootMrpLabel]))
+    const allLabels = Array.from(new Set([...sortedGroups.map((g) => g.mrp), rootMrpLabel]))
       .sort((a, b) => a.localeCompare(b));
     const colorByLabel = new Map<string, ReturnType<typeof getColorForGroup>>();
     for (let i = 0; i < allLabels.length; i += 1) {
@@ -311,8 +360,8 @@ export default function BomExplorer() {
     }
 
     const legendCounts = new Map<string, number>();
-    for (const [label, nodesInGroup] of sortedGroups) {
-      legendCounts.set(label, nodesInGroup.length);
+    for (const g of sortedGroups) {
+      legendCounts.set(g.mrp, (legendCounts.get(g.mrp) ?? 0) + g.nodes.length);
     }
     legendCounts.set(rootMrpLabel, (legendCounts.get(rootMrpLabel) ?? 0) + 1);
 
@@ -320,16 +369,16 @@ export default function BomExplorer() {
     const levelBaseY = NODE_H + ROOT_TO_LEVEL_GAP;
 
     for (let index = 0; index < sortedGroups.length; index += 1) {
-      const [mrp, groupNodesRaw] = sortedGroups[index];
-      if (!groupNodesRaw.length) continue;
+      const g = sortedGroups[index];
+      if (!g.nodes.length) continue;
 
-      const colors = colorByLabel.get(mrp) ?? getColorForGroup(index);
-      const isMuted = inactiveMrps.includes(mrp);
+      const colors = colorByLabel.get(g.mrp) ?? getColorForGroup(index);
+      const isMuted = inactiveMrps.includes(g.mrp);
       const depthBuckets = new Map<number, Node[]>();
 
-      for (const node of groupNodesRaw) {
-        const nodeDepth = Number(node.data?.depth ?? 1);
-        const depth = Number.isFinite(nodeDepth) && nodeDepth > 0 ? nodeDepth : 1;
+      for (const node of g.nodes) {
+        const nodeDepth = Number(node.data?.depth ?? g.level);
+        const depth = Number.isFinite(nodeDepth) && nodeDepth > 0 ? nodeDepth : g.level;
         if (!depthBuckets.has(depth)) depthBuckets.set(depth, []);
         depthBuckets.get(depth)!.push(node);
       }
@@ -352,21 +401,23 @@ export default function BomExplorer() {
           const node = rowNodes[col];
           node.position = { x: groupLeft + col * (NODE_W + LEVEL_NODE_GAP), y: rowY };
           node.data = { ...node.data, mrpColor: colors.accent, dimmed: isMuted };
+          materialGroupNodeById.set(node.id, g.id);
         }
       }
 
-      const minX = Math.min(...groupNodesRaw.map((n) => n.position.x));
-      const minY = Math.min(...groupNodesRaw.map((n) => n.position.y));
-      const maxX = Math.max(...groupNodesRaw.map((n) => n.position.x + NODE_W));
-      const maxY = Math.max(...groupNodesRaw.map((n) => n.position.y + NODE_H));
+      const minX = Math.min(...g.nodes.map((n) => n.position.x));
+      const minY = Math.min(...g.nodes.map((n) => n.position.y));
+      const maxX = Math.max(...g.nodes.map((n) => n.position.x + NODE_W));
+      const maxY = Math.max(...g.nodes.map((n) => n.position.y + NODE_H));
 
       groupNodes.push({
-        id: `mrp:${mrp}`,
+        id: g.id,
         type: "mrpGroup",
         position: { x: minX - GROUP_PAD_X, y: minY - GROUP_PAD_TOP },
         data: {
-          label: mrp,
-          count: groupNodesRaw.length,
+          label: g.mrp,
+          level: g.level,
+          count: g.nodes.length,
           dimmed: isMuted,
           groupAccent: colors.accent,
           groupBorderColor: colors.border,
@@ -400,13 +451,15 @@ export default function BomExplorer() {
         mrpController: rootMrpLabel,
         materialType: rootMaterialType,
       };
+      materialGroupNodeById.set(rootNode.id, rootGroupId);
 
       groupNodes.push({
-        id: `mrp:root:${rootMrpLabel}`,
+        id: rootGroupId,
         type: "mrpGroup",
         position: { x: rootNode.position.x - GROUP_PAD_X, y: rootNode.position.y - GROUP_PAD_TOP },
         data: {
           label: rootMrpLabel,
+          level: 0,
           count: 1,
           metaText: "Root material",
           dimmed: rootMuted,
@@ -427,25 +480,279 @@ export default function BomExplorer() {
       });
     }
 
-    const nodeById = new Map(nodeArr.map((node) => [node.id, node]));
-    const styledEdges = edgeList.map((edge) => {
+    const baseNodeById = new Map(nodeArr.map((node) => [node.id, node]));
+    const rawEdges = edgeList.filter((edge) => baseNodeById.has(edge.source) && baseNodeById.has(edge.target));
+
+    const materialEdges = rawEdges.filter((edge) => {
+      const s = materialGroupNodeById.get(edge.source);
+      const t = materialGroupNodeById.get(edge.target);
+      return Boolean(s && t && s === t);
+    });
+
+    const incomingByTarget = new Map<string, Edge[]>();
+    for (const edge of materialEdges) {
+      if (!incomingByTarget.has(edge.target)) incomingByTarget.set(edge.target, []);
+      incomingByTarget.get(edge.target)!.push(edge);
+    }
+
+    const busNodes: Node[] = [];
+    const transformedEdges: Edge[] = [];
+
+    for (const [targetId, incomingEdges] of incomingByTarget.entries()) {
+      const targetGroupId = materialGroupNodeById.get(targetId);
+
+      if (incomingEdges.length < 2) {
+        for (const edge of incomingEdges) {
+          const sourceGroupId = materialGroupNodeById.get(edge.source);
+          transformedEdges.push({
+            ...edge,
+            data: {
+              ...(edge.data as Record<string, unknown> | undefined),
+              sourceGroupId,
+              targetGroupId,
+              crossGroup: false,
+              mrpLevel: false,
+            },
+          });
+        }
+        continue;
+      }
+
+      const targetNode = baseNodeById.get(targetId);
+      if (!targetNode) {
+        transformedEdges.push(...incomingEdges);
+        continue;
+      }
+
+      const targetData = (targetNode.data ?? {}) as Record<string, unknown>;
+      const busId = `bus:${targetId}`;
+      const busX = targetNode.position.x + NODE_W / 2 - BUS_NODE_SIZE / 2;
+      const busY = targetNode.position.y - MATERIAL_BUS_OFFSET_Y;
+      const busDimmed = Boolean(targetData.dimmed);
+      const busColor = String(targetData.mrpColor ?? "var(--accent)");
+      const outDepth = Math.min(...incomingEdges.map((e) => Number((e.data as { depth?: number } | undefined)?.depth ?? 99)));
+
+      busNodes.push({
+        id: busId,
+        type: "busJoint",
+        position: { x: busX, y: busY },
+        data: { dimmed: busDimmed, color: busColor },
+        draggable: false,
+        selectable: false,
+        connectable: false,
+        focusable: false,
+        zIndex: 3,
+        style: {
+          width: BUS_NODE_SIZE,
+          height: BUS_NODE_SIZE,
+        },
+      });
+
+      for (const edge of incomingEdges) {
+        const sourceGroupId = materialGroupNodeById.get(edge.source);
+        transformedEdges.push({
+          ...edge,
+          id: `${edge.id}::bus-in`,
+          target: busId,
+          label: undefined,
+          markerEnd: undefined,
+          data: {
+            ...(edge.data as Record<string, unknown> | undefined),
+            sourceGroupId,
+            targetGroupId,
+            crossGroup: false,
+            mrpLevel: false,
+          },
+        });
+      }
+
+      transformedEdges.push({
+        id: `${busId}::out`,
+        source: busId,
+        target: targetId,
+        type: "bomEdge",
+        data: {
+          depth: outDepth,
+          sourceGroupId: targetGroupId,
+          targetGroupId,
+          crossGroup: false,
+          mrpLevel: false,
+        },
+      });
+    }
+
+    const groupNodeById = new Map(groupNodes.map((node) => [node.id, node]));
+    const pairCounts = new Map<string, { sourceGroupId: string; targetGroupId: string; count: number }>();
+    const incomingSourcesByTarget = new Map<string, Set<string>>();
+
+    for (const edge of rawEdges) {
+      const sourceGroupId = materialGroupNodeById.get(edge.source);
+      const targetGroupId = materialGroupNodeById.get(edge.target);
+      if (!sourceGroupId || !targetGroupId || sourceGroupId === targetGroupId) continue;
+
+      // Converge from deeper level groups to upper level groups (towards root).
+      const key = `${targetGroupId}->${sourceGroupId}`;
+      const current = pairCounts.get(key);
+      if (current) current.count += 1;
+      else pairCounts.set(key, { sourceGroupId: targetGroupId, targetGroupId: sourceGroupId, count: 1 });
+
+      if (!incomingSourcesByTarget.has(sourceGroupId)) incomingSourcesByTarget.set(sourceGroupId, new Set());
+      incomingSourcesByTarget.get(sourceGroupId)!.add(targetGroupId);
+    }
+
+    const mrpBusNodes: Node[] = [];
+    const mrpBusEdges: Edge[] = [];
+    const mrpHubNodes = new Map<string, Node>();
+
+    const ensureMrpHub = (groupId: string, side: "up" | "down") => {
+      const id = `mrp-hub:${side}:${groupId}`;
+      const existing = mrpHubNodes.get(id);
+      if (existing) return existing;
+
+      const groupNode = groupNodeById.get(groupId);
+      if (!groupNode) return null;
+      const style = (groupNode.style ?? {}) as Record<string, unknown>;
+      const width = Number(style.width ?? 0);
+      const height = Number(style.height ?? 0);
+      if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return null;
+
+      const x = groupNode.position.x + width / 2 - BUS_NODE_SIZE / 2;
+      const y = side === "up"
+        ? groupNode.position.y - MRP_HUB_OFFSET_Y
+        : groupNode.position.y + height + MRP_HUB_OFFSET_Y - BUS_NODE_SIZE;
+      const groupData = (groupNode.data ?? {}) as Record<string, unknown>;
+
+      const hubNode: Node = {
+        id,
+        type: "busJoint",
+        position: { x, y },
+        data: {
+          dimmed: Boolean(groupData.dimmed),
+          color: String(groupData.groupAccent ?? "var(--accent)"),
+          hidden: true,
+        },
+        draggable: false,
+        selectable: false,
+        connectable: false,
+        focusable: false,
+        zIndex: 3,
+        style: {
+          width: BUS_NODE_SIZE,
+          height: BUS_NODE_SIZE,
+        },
+      };
+
+      mrpHubNodes.set(id, hubNode);
+      return hubNode;
+    };
+
+    const levelBusByTarget = new Map<string, string>();
+    for (const [targetGroupId] of incomingSourcesByTarget.entries()) {
+      const targetInHub = ensureMrpHub(targetGroupId, "down");
+      if (!targetInHub) continue;
+
+      const busId = `mrp-level-bus:${targetGroupId}`;
+      levelBusByTarget.set(targetGroupId, busId);
+      const inHubData = (targetInHub.data ?? {}) as Record<string, unknown>;
+
+      mrpBusNodes.push({
+        id: busId,
+        type: "busJoint",
+        position: {
+          x: targetInHub.position.x,
+          y: targetInHub.position.y + MRP_BUS_OFFSET_Y,
+        },
+        data: {
+          dimmed: Boolean(inHubData.dimmed),
+          color: String(inHubData.color ?? "var(--accent)"),
+        },
+        draggable: false,
+        selectable: false,
+        connectable: false,
+        focusable: false,
+        zIndex: 3,
+        style: {
+          width: BUS_NODE_SIZE,
+          height: BUS_NODE_SIZE,
+        },
+      });
+
+      mrpBusEdges.push({
+        id: `${busId}::to-target`,
+        source: busId,
+        target: targetInHub.id,
+        type: "bomEdge",
+        data: {
+          depth: 99,
+          crossGroup: true,
+          mrpLevel: true,
+          sourceGroupId: targetGroupId,
+          targetGroupId,
+        },
+      });
+    }
+
+    for (const pair of pairCounts.values()) {
+      const sourceUpHub = ensureMrpHub(pair.sourceGroupId, "up");
+      const targetDownHub = ensureMrpHub(pair.targetGroupId, "down");
+      if (!sourceUpHub || !targetDownHub) continue;
+
+      const targetBusId = levelBusByTarget.get(pair.targetGroupId);
+      mrpBusEdges.push({
+        id: `mrp-link:${pair.sourceGroupId}->${pair.targetGroupId}`,
+        source: sourceUpHub.id,
+        target: targetBusId ?? targetDownHub.id,
+        type: "bomEdge",
+        data: {
+          depth: 99,
+          crossGroup: true,
+          mrpLevel: true,
+          sourceGroupId: pair.sourceGroupId,
+          targetGroupId: pair.targetGroupId,
+        },
+      });
+    }
+
+    const materialEdgesForRender = transformedEdges;
+
+    const allRenderNodes = [...groupNodes, ...nodeArr, ...busNodes, ...Array.from(mrpHubNodes.values()), ...mrpBusNodes];
+    const allRenderEdges = [...materialEdgesForRender, ...mrpBusEdges];
+
+    const nodeById = new Map(allRenderNodes.map((node) => [node.id, node]));
+    const styledEdges = allRenderEdges.map((edge) => {
       const sourceNode = nodeById.get(edge.source);
       const targetNode = nodeById.get(edge.target);
       const sourceData = (sourceNode?.data ?? {}) as Record<string, unknown>;
       const targetData = (targetNode?.data ?? {}) as Record<string, unknown>;
       const isDimmed = Boolean(sourceData.dimmed) || Boolean(targetData.dimmed);
-      const color = isDimmed ? "#4b4f62" : "var(--accent)";
+      const edgeData = (edge.data ?? {}) as Record<string, unknown>;
+      const isMrpLevel = Boolean(edgeData.mrpLevel);
+      const baseColor = String(sourceData.groupAccent ?? sourceData.mrpColor ?? sourceData.color ?? "var(--accent)");
+      const color = isDimmed ? "#4b4f62" : baseColor;
       const edgeDepth = Number((edge.data as { depth?: number } | undefined)?.depth ?? 99);
+      const isBusIncoming = edge.id.includes("::bus-in");
+      const markerEnd = isBusIncoming ? undefined : { type: MarkerType.ArrowClosed, color };
+      const sourceIsBus = sourceNode?.type === "busJoint";
+      const targetIsBus = targetNode?.type === "busJoint";
+      const sourceCenterY = (sourceNode?.position.y ?? 0) + BUS_NODE_SIZE / 2;
+      const targetCenterY = (targetNode?.position.y ?? 0) + BUS_NODE_SIZE / 2;
+      const downward = sourceCenterY <= targetCenterY;
+      const sourceHandle = sourceIsBus ? (downward ? "s-bottom" : "s-top") : edge.sourceHandle;
+      const targetHandle = targetIsBus ? (downward ? "t-top" : "t-bottom") : edge.targetHandle;
 
       return {
         ...edge,
-        animated: !isDimmed && edgeDepth <= 2,
+        sourceHandle,
+        targetHandle,
+        animated: !isDimmed && edgeDepth <= 2 && !isBusIncoming && !isMrpLevel,
         style: {
           stroke: color,
-          strokeWidth: isDimmed ? 1.25 : 1.65,
-          opacity: isDimmed ? 0.24 : 0.9,
+          strokeWidth: isMrpLevel
+            ? (isDimmed ? 1.4 : 2.2)
+            : (isBusIncoming ? (isDimmed ? 1.1 : 1.35) : (isDimmed ? 1.25 : 1.65)),
+          opacity: isDimmed ? 0.24 : (isMrpLevel ? 0.82 : (isBusIncoming ? 0.72 : 0.9)),
         },
-        markerEnd: { type: MarkerType.ArrowClosed, color },
+        markerEnd,
       };
     });
 
@@ -459,7 +766,7 @@ export default function BomExplorer() {
         active: !inactiveMrps.includes(label),
       }));
 
-    return { nodes: [...groupNodes, ...nodeArr], edges: styledEdges, tooLarge, mrpLegend };
+    return { nodes: allRenderNodes, edges: styledEdges, tooLarge, mrpLegend };
   }, [items, committed, rootMrpLabel, rootMaterialType, inactiveMrps]);
 
   useEffect(() => {
@@ -587,6 +894,7 @@ export default function BomExplorer() {
               edges={edges}
               nodeTypes={nodeTypes}
               edgeTypes={edgeTypes}
+              connectionMode={ConnectionMode.Loose}
               fitView
               minZoom={0.1}
               onNodeClick={(_, node) => {
@@ -600,7 +908,7 @@ export default function BomExplorer() {
                   const data = node.data as Record<string, unknown>;
                   if (Boolean(data?.dimmed)) return "#4b4f62";
                   if (node.type === "mrpGroup") return String(data?.groupAccent ?? "#2e3250");
-                  return String(data?.mrpColor ?? "var(--accent)");
+                  return String(data?.mrpColor ?? data?.color ?? "var(--accent)");
                 }}
                 maskColor="rgba(15,17,23,.7)"
               />
