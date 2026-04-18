@@ -4,13 +4,11 @@ export default function TopNav() {
   return (
     <header className="topnav">
       <Link to="/" className="topnav-logo">
-        <div className="topnav-logo-mark">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-            <rect width="16" height="16" fill="#E2001A" />
-            <text x="2" y="12" fill="white" fontSize="11" fontWeight="bold" fontFamily="Arial">D</text>
-          </svg>
-        </div>
-        <span className="topnav-logo-text">Danfoss</span>
+        <img
+          src="/Danfoss%20logo.svg"
+          alt="Danfoss"
+          className="topnav-logo-image"
+        />
       </Link>
 
       <nav className="topnav-links">
