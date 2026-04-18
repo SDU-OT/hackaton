@@ -35,7 +35,16 @@ export default function MaterialBrowser() {
   const [offset, setOffset] = useState(0);
   const [sortCol, setSortCol] = useState("material");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const [ranges, setRanges] = useState({
+    minTotalOrders: "", maxTotalOrders: "",
+    minUnitsProduced: "", maxUnitsProduced: "",
+    minAvgThroughput: "", maxAvgThroughput: "",
+    minScrapRate: "", maxScrapRate: "",
+    minScrapCost: "", maxScrapCost: "",
+  });
   const navigate = useNavigate();
+
+  const n = (s: string) => s !== "" ? Number(s) : null;
 
   const { data, loading, error } = useQuery<{ materialCatalog: MaterialCatalogResult }>(MATERIAL_CATALOG, {
     variables: {
@@ -46,6 +55,16 @@ export default function MaterialBrowser() {
       dateTo,
       sortBy: sortCol,
       sortDir,
+      minTotalOrders:   n(ranges.minTotalOrders),
+      maxTotalOrders:   n(ranges.maxTotalOrders),
+      minUnitsProduced: n(ranges.minUnitsProduced),
+      maxUnitsProduced: n(ranges.maxUnitsProduced),
+      minAvgThroughput: n(ranges.minAvgThroughput),
+      maxAvgThroughput: n(ranges.maxAvgThroughput),
+      minScrapRate:     n(ranges.minScrapRate),
+      maxScrapRate:     n(ranges.maxScrapRate),
+      minScrapCost:     n(ranges.minScrapCost),
+      maxScrapCost:     n(ranges.maxScrapCost),
       limit: PAGE_SIZE,
       offset,
     },
@@ -80,6 +99,11 @@ export default function MaterialBrowser() {
     setOffset(0);
   }, []);
 
+  const setRange = useCallback((key: string, val: string) => {
+    setRanges(prev => ({ ...prev, [key]: val }));
+    setOffset(0);
+  }, []);
+
   const handleSort = useCallback((col: string) => {
     if (col === sortCol) {
       setSortDir(d => d === "asc" ? "desc" : "asc");
@@ -98,10 +122,11 @@ export default function MaterialBrowser() {
     setMrpSearch("");
     setDateFrom("");
     setDateTo("");
+    setRanges({ minTotalOrders: "", maxTotalOrders: "", minUnitsProduced: "", maxUnitsProduced: "", minAvgThroughput: "", maxAvgThroughput: "", minScrapRate: "", maxScrapRate: "", minScrapCost: "", maxScrapCost: "" });
     setOffset(0);
   }, []);
 
-  const hasFilters = committed || activeType || activeMrp || dateFrom || dateTo;
+  const hasFilters = committed || activeType || activeMrp || dateFrom || dateTo || Object.values(ranges).some(v => v !== "");
 
   return (
     <div className="materials-layout">
@@ -166,6 +191,37 @@ export default function MaterialBrowser() {
               </label>
             ))}
           </div>
+        </div>
+
+        <div>
+          <h3>Filter by Range</h3>
+          <div style={{ fontSize: 11, color: "var(--text-secondary)", marginBottom: 10 }}>
+            Reflects selected date range
+          </div>
+          {([
+            { minKey: "minTotalOrders",   maxKey: "maxTotalOrders",   label: "Total Orders" },
+            { minKey: "minUnitsProduced", maxKey: "maxUnitsProduced", label: "Units Produced" },
+            { minKey: "minAvgThroughput", maxKey: "maxAvgThroughput", label: "Avg Throughput (min)" },
+            { minKey: "minScrapRate",     maxKey: "maxScrapRate",     label: "Scrap Rate (%)" },
+            { minKey: "minScrapCost",     maxKey: "maxScrapCost",     label: "Scrap Cost (€)" },
+          ] as const).map(({ minKey, maxKey, label }) => (
+            <div key={minKey} style={{ marginBottom: 10 }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)", marginBottom: 4 }}>{label}</div>
+              <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+                <input type="number" min={0} placeholder="min"
+                  value={ranges[minKey]}
+                  onChange={e => setRange(minKey, e.target.value)}
+                  style={{ width: "100%", fontSize: 12, padding: "4px 6px" }}
+                />
+                <span style={{ color: "var(--text-secondary)", flexShrink: 0, fontSize: 12 }}>—</span>
+                <input type="number" min={0} placeholder="max"
+                  value={ranges[maxKey]}
+                  onChange={e => setRange(maxKey, e.target.value)}
+                  style={{ width: "100%", fontSize: 12, padding: "4px 6px" }}
+                />
+              </div>
+            </div>
+          ))}
         </div>
 
         {hasFilters && (

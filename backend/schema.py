@@ -357,12 +357,28 @@ class Query:
         date_to: str = "",
         sort_by: str = "material",
         sort_dir: str = "asc",
+        min_total_orders: Optional[float] = None,
+        max_total_orders: Optional[float] = None,
+        min_units_produced: Optional[float] = None,
+        max_units_produced: Optional[float] = None,
+        min_avg_throughput: Optional[float] = None,
+        max_avg_throughput: Optional[float] = None,
+        min_scrap_rate: Optional[float] = None,
+        max_scrap_rate: Optional[float] = None,
+        min_scrap_cost: Optional[float] = None,
+        max_scrap_cost: Optional[float] = None,
         limit: int = 50,
         offset: int = 0,
     ) -> MaterialCatalogResult:
         result = mc_res.get_material_catalog(
             query, material_type, mrp_controller, date_from, date_to,
-            sort_by, sort_dir, limit, offset
+            sort_by, sort_dir,
+            min_total_orders, max_total_orders,
+            min_units_produced, max_units_produced,
+            min_avg_throughput, max_avg_throughput,
+            min_scrap_rate, max_scrap_rate,
+            min_scrap_cost, max_scrap_cost,
+            limit, offset
         )
         rows = [MaterialCatalogRow(**r) for r in result["rows"]]
         return MaterialCatalogResult(rows=rows, total=result["total"])

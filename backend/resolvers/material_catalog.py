@@ -1,11 +1,12 @@
+from typing import Optional
 from db import query
 
 
 _SORTABLE = {
-    "material":             "mm.material",
-    "description":          "mm.description",
-    "mrp_controller":       "mm.mrp_controller",
-    "material_type":        "mm.material_type",
+    "material":             "material",
+    "description":          "description",
+    "mrp_controller":       "mrp_controller",
+    "material_type":        "material_type",
     "total_ordered":        "total_ordered",
     "total_units_produced": "total_units_produced",
     "scrap_rate_pct":       "scrap_rate_pct",
@@ -22,15 +23,24 @@ def get_material_catalog(
     date_to: str = "",
     sort_by: str = "material",
     sort_dir: str = "asc",
+    min_total_orders: Optional[float] = None,
+    max_total_orders: Optional[float] = None,
+    min_units_produced: Optional[float] = None,
+    max_units_produced: Optional[float] = None,
+    min_avg_throughput: Optional[float] = None,
+    max_avg_throughput: Optional[float] = None,
+    min_scrap_rate: Optional[float] = None,
+    max_scrap_rate: Optional[float] = None,
+    min_scrap_cost: Optional[float] = None,
+    max_scrap_cost: Optional[float] = None,
     limit: int = 50,
     offset: int = 0,
 ):
     pattern = f"%{search}%" if search else "%"
     use_date_filter = bool(date_from or date_to)
-    order_col = _SORTABLE.get(sort_by, "mm.material")
+    order_col = _SORTABLE.get(sort_by, "material")
     order_dir = "DESC" if sort_dir.lower() == "desc" else "ASC"
 
-    # WHERE clauses applied to material_master
     where_clauses = ["(mm.material ILIKE ? OR mm.description ILIKE ?)"]
     where_params: list = [pattern, pattern]
     if material_type:
@@ -41,16 +51,25 @@ def get_material_catalog(
         where_params.append(mrp_controller)
     where_sql = " AND ".join(where_clauses)
 
-    # Fast count — no joins needed (all are LEFT JOINs that don't filter rows)
-    count_sql = f"""
-        SELECT COUNT(*) FROM material_master mm WHERE {where_sql}
-    """
+    # Post-aggregation range filters (applied in outer wrapper query)
+    _range_pairs = [
+        (min_total_orders,   "total_ordered",        ">="),
+        (max_total_orders,   "total_ordered",        "<="),
+        (min_units_produced, "total_units_produced",  ">="),
+        (max_units_produced, "total_units_produced",  "<="),
+        (min_avg_throughput, "avg_throughput_min",    ">="),
+        (max_avg_throughput, "avg_throughput_min",    "<="),
+        (min_scrap_rate,     "scrap_rate_pct",        ">="),
+        (max_scrap_rate,     "scrap_rate_pct",        "<="),
+        (min_scrap_cost,     "total_scrap_cost",      ">="),
+        (max_scrap_cost,     "total_scrap_cost",      "<="),
+    ]
+    range_clauses = [f"{col} {op} ?" for val, col, op in _range_pairs if val is not None]
+    range_params  = [val             for val, col, op in _range_pairs if val is not None]
+    use_range_filter = bool(range_clauses)
 
     if use_date_filter:
-        # Aggregate directly from scrap_records with date filter.
-        # scrap_records.material is already leading-zero-stripped.
-        # Normalize mm.material the same way so we can equijoin.
-        main_sql = f"""
+        inner_sql = f"""
             WITH date_scrap AS (
                 SELECT
                     material,
@@ -84,16 +103,10 @@ def get_material_catalog(
             FROM mm_norm mm
             LEFT JOIN date_scrap ds ON ds.material = mm.norm
             LEFT JOIN routing_agg ra ON ra.material_norm = mm.norm
-            ORDER BY {order_col} {order_dir} NULLS LAST
-            LIMIT ? OFFSET ?
         """
-        # params: date CTE params, then WHERE params, then LIMIT/OFFSET
-        params = [date_from, date_from, date_to, date_to] + where_params
+        inner_params = [date_from, date_from, date_to, date_to] + where_params
     else:
-        # Use pre-aggregated scrap_agg (fast path).
-        # scrap_agg.material is already stripped; routing_agg.material_norm is stripped.
-        # Normalize mm.material once in a CTE so both joins are equijoins.
-        main_sql = f"""
+        inner_sql = f"""
             WITH mm_norm AS (
                 SELECT *, LTRIM(material, '0') AS norm
                 FROM material_master mm
@@ -115,12 +128,32 @@ def get_material_catalog(
             FROM mm_norm mm
             LEFT JOIN scrap_agg sa  ON sa.material      = mm.norm
             LEFT JOIN routing_agg ra ON ra.material_norm = mm.norm
+        """
+        inner_params = where_params
+
+    if use_range_filter:
+        range_where = " AND ".join(range_clauses)
+        count_sql = f"SELECT COUNT(*) FROM ({inner_sql}) _sub WHERE {range_where}"
+        main_sql = f"""
+            SELECT * FROM ({inner_sql}) _sub
+            WHERE {range_where}
             ORDER BY {order_col} {order_dir} NULLS LAST
             LIMIT ? OFFSET ?
         """
-        params = where_params
+        count_params = inner_params + range_params
+        params = inner_params + range_params
+    else:
+        # Fast count: all joins are LEFT JOINs so no rows are filtered out
+        count_sql = f"SELECT COUNT(*) FROM material_master mm WHERE {where_sql}"
+        main_sql = f"""
+            SELECT * FROM ({inner_sql}) _sub
+            ORDER BY {order_col} {order_dir} NULLS LAST
+            LIMIT ? OFFSET ?
+        """
+        count_params = where_params
+        params = inner_params
 
-    total_rows = query(count_sql, where_params)
+    total_rows = query(count_sql, count_params)
     total = int(total_rows[0][0]) if total_rows else 0
 
     rows = query(main_sql, params + [limit, offset])

@@ -266,6 +266,16 @@ export const MATERIAL_CATALOG = gql`
     $dateTo: String
     $sortBy: String
     $sortDir: String
+    $minTotalOrders: Float
+    $maxTotalOrders: Float
+    $minUnitsProduced: Float
+    $maxUnitsProduced: Float
+    $minAvgThroughput: Float
+    $maxAvgThroughput: Float
+    $minScrapRate: Float
+    $maxScrapRate: Float
+    $minScrapCost: Float
+    $maxScrapCost: Float
     $limit: Int
     $offset: Int
   ) {
@@ -277,6 +287,16 @@ export const MATERIAL_CATALOG = gql`
       dateTo: $dateTo
       sortBy: $sortBy
       sortDir: $sortDir
+      minTotalOrders: $minTotalOrders
+      maxTotalOrders: $maxTotalOrders
+      minUnitsProduced: $minUnitsProduced
+      maxUnitsProduced: $maxUnitsProduced
+      minAvgThroughput: $minAvgThroughput
+      maxAvgThroughput: $maxAvgThroughput
+      minScrapRate: $minScrapRate
+      maxScrapRate: $maxScrapRate
+      minScrapCost: $minScrapCost
+      maxScrapCost: $maxScrapCost
       limit: $limit
       offset: $offset
     ) {
