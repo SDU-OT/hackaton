@@ -28,7 +28,7 @@ export default function MaterialDetail() {
   const { data: rData, loading: rLoad } = useQuery<{ routing: RoutingOperation[] }>(GET_ROUTING, {
     variables: { materialId },
   });
-  const { data: bData } = useQuery<{ bomChildren: BomItem[] }>(GET_BOM_CHILDREN, {
+  const { data: bData, loading: bLoad } = useQuery<{ bomChildren: BomItem[] }>(GET_BOM_CHILDREN, {
     variables: { materialId },
   });
   const { data: scrapData } = useQuery<{ materialScrap: { totalOrdered: number; totalScrap: number; totalDelivered: number; scrapRatePct: number } | null }>(GET_MATERIAL_SCRAP, { variables: { materialId } });
@@ -76,32 +76,56 @@ export default function MaterialDetail() {
 
       {mat.hasBom && (
         <div className="card">
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: ".75rem" }}>
-            <h3>BOM — Direct Components ({children.length})</h3>
-            <Link to={`/bom/${mat.material}`} className="btn btn-ghost" style={{ fontSize: ".8rem", padding: ".3rem .8rem" }}>
-              Full BOM Explorer →
-            </Link>
-          </div>
-          <div className="data-table-wrap">
-            <table className="data-table">
-              <thead>
-                <tr><th>Component</th><th>Description</th><th>Type</th><th>Qty</th><th>Unit</th><th>Cat</th><th>Has BOM</th></tr>
-              </thead>
-              <tbody>
-                {children.map((c) => (
-                  <tr key={c.component} className="clickable" onClick={() => navigate(`/materials/${c.component}`)}>
-                    <td><code style={{ fontFamily: "var(--mono)", fontSize: ".8rem" }}>{c.component}</code></td>
-                    <td title={c.description ?? ""}>{c.description ?? "—"}</td>
-                    <td><TypeBadge type={c.materialType} /></td>
-                    <td>{c.quantity.toFixed(3)}</td>
-                    <td>{c.unit}</td>
-                    <td>{c.itemCategory}</td>
-                    <td>{c.hasChildren ? "✓" : ""}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <details>
+            <summary
+              style={{
+                cursor: "pointer",
+                userSelect: "none",
+                fontWeight: 700,
+                color: "var(--text-head)",
+              }}
+            >
+              Recipe (Immediate Ingredients) {bLoad ? "" : `(${children.length})`}
+            </summary>
+
+            <div style={{ marginTop: ".9rem" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: ".75rem" }}>
+                <div style={{ color: "var(--text-muted)", fontSize: ".82rem" }}>
+                  These are the direct ingredients used to make this material.
+                </div>
+                <Link to={`/bom/${mat.material}`} className="btn btn-ghost" style={{ fontSize: ".8rem", padding: ".3rem .8rem" }}>
+                  Full BOM Explorer →
+                </Link>
+              </div>
+
+              {bLoad ? (
+                <div className="spinner">Loading ingredients…</div>
+              ) : children.length === 0 ? (
+                <div style={{ color: "var(--text-muted)", fontSize: ".85rem" }}>No immediate ingredients found.</div>
+              ) : (
+                <div className="data-table-wrap">
+                  <table className="data-table">
+                    <thead>
+                      <tr><th>Component</th><th>Description</th><th>Type</th><th>Qty</th><th>Unit</th><th>Cat</th><th>Has BOM</th></tr>
+                    </thead>
+                    <tbody>
+                      {children.map((c) => (
+                        <tr key={c.component} className="clickable" onClick={() => navigate(`/materials/${c.component}`)}>
+                          <td><code style={{ fontFamily: "var(--mono)", fontSize: ".8rem" }}>{c.component}</code></td>
+                          <td title={c.description ?? ""}>{c.description ?? "—"}</td>
+                          <td><TypeBadge type={c.materialType} /></td>
+                          <td>{c.quantity.toFixed(3)}</td>
+                          <td>{c.unit}</td>
+                          <td>{c.itemCategory}</td>
+                          <td>{c.hasChildren ? "✓" : ""}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </details>
         </div>
       )}
 
