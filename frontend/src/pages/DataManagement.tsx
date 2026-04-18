@@ -1,7 +1,26 @@
 import { useState, useRef } from "react";
 import { useQuery, useMutation } from "@apollo/client/react";
 import { GET_IMPORTED_DATASETS, GET_DB_TABLES, IMPORT_DATASET, REMOVE_DATASET } from "../graphql/queries";
-import type { ImportedDataset, DbTable } from "../graphql/types";
+import type { ImportedDataset, DbTable, ImportResult } from "../graphql/types";
+
+type ImportDatasetMutationData = {
+  importDataset: ImportResult;
+};
+
+type ImportDatasetMutationVars = {
+  name: string;
+  csvContent: string;
+  targetTable: string;
+  columnMapping?: string;
+};
+
+type RemoveDatasetMutationData = {
+  removeDataset: boolean;
+};
+
+type RemoveDatasetMutationVars = {
+  name: string;
+};
 
 const TARGET_TABLES = [
   { value: "production_orders", label: "Production Orders" },
@@ -60,7 +79,7 @@ export default function DataManagement() {
   const { data: tablesData } =
     useQuery<{ dbTables: DbTable[] }>(GET_DB_TABLES);
 
-  const [importDataset, { loading: importing }] = useMutation(IMPORT_DATASET, {
+  const [importDataset, { loading: importing }] = useMutation<ImportDatasetMutationData, ImportDatasetMutationVars>(IMPORT_DATASET, {
     onCompleted: (d) => {
       setImportSuccess(
         `Imported "${d.importDataset.name}" → ${d.importDataset.tableName}: ${d.importDataset.rowCount.toLocaleString()} rows`
@@ -78,7 +97,7 @@ export default function DataManagement() {
     },
   });
 
-  const [removeDataset, { loading: removingMutation }] = useMutation(REMOVE_DATASET, {
+  const [removeDataset, { loading: removingMutation }] = useMutation<RemoveDatasetMutationData, RemoveDatasetMutationVars>(REMOVE_DATASET, {
     onCompleted: () => {
       setRemoving(null);
       refetchDatasets();

@@ -303,7 +303,6 @@ def _materialize(conn):
                 SUM(COALESCE(scrap_cost, 0))   AS total_scrap_cost
             FROM scrap_records
             WHERE material IS NOT NULL AND TRIM(CAST(material AS VARCHAR)) != ''
-              AND COALESCE(operation_qty, 0) > 0
             GROUP BY TRIM(CAST(material AS VARCHAR))
         ),
         from_prod AS (
@@ -504,8 +503,8 @@ def import_csv_to_table(name: str, csv_content: str, target_table: str, column_m
                 VALUES (?, ?, ?, ?, NOW())
             """, [name, name + ".csv", target_table, row_count])
 
-            # Refresh aggregates that depend on this table
-            if target_table == "production_orders":
+            # Refresh aggregates that depend on these mutable source tables.
+            if target_table in {"production_orders", "scrap_records"}:
                 _materialize(conn)
 
             return {"name": name, "table_name": target_table, "row_count": row_count}
@@ -525,7 +524,7 @@ def remove_dataset(name: str) -> bool:
         if target_table in USER_TABLES:
             conn.execute(f"DELETE FROM {target_table}")
         conn.execute("DELETE FROM imported_datasets WHERE name = ?", [name])
-        if target_table == "production_orders":
+        if target_table in {"production_orders", "scrap_records"}:
             _materialize(conn)
         return True
 

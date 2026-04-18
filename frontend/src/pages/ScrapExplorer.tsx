@@ -1,9 +1,49 @@
 import { useState } from "react";
 import { useQuery } from "@apollo/client/react";
 import { Sankey, Tooltip, ResponsiveContainer } from "recharts";
-import { GET_AGGREGATE_SCRAP_SANKEY, GET_SCRAP_STATS, GET_SCRAP_CHAIN } from "../graphql/queries";
+import {
+  GET_AGGREGATE_SCRAP_SANKEY,
+  GET_SCRAP_STATS,
+  GET_SCRAP_CHAIN,
+  GET_SCRAP_YEARS,
+} from "../graphql/queries";
 import type { ScrapSankeyData, ScrapStat, ScrapChainItem } from "../graphql/types";
 import ScrapBadge from "../components/ScrapBadge";
+
+const SANKEY_NODE_PALETTE = [
+  "#324568",
+  "#2f4f5f",
+  "#4f4d79",
+  "#3c5578",
+  "#4e5d72",
+  "#355b63",
+];
+
+type SankeyNodeRenderProps = {
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
+  index?: number;
+  payload?: {
+    name?: string;
+  };
+};
+
+type SankeyTooltipEntry = {
+  name?: string;
+  value?: unknown;
+  payload?: {
+    name?: string;
+    source?: { name?: string };
+    target?: { name?: string };
+  };
+};
+
+type SankeyTooltipProps = {
+  active?: boolean;
+  payload?: SankeyTooltipEntry[];
+};
 
 function formatMin(min: number) {
   if (!min || min === 0) return "—";
@@ -11,16 +51,94 @@ function formatMin(min: number) {
   return `${(min / 60).toFixed(2)} h`;
 }
 
+function formatSankeyValue(value: unknown): string {
+  const numeric = typeof value === "number" ? value : Number(value ?? 0);
+  if (!Number.isFinite(numeric)) return "0";
+  return numeric.toLocaleString(undefined, { maximumFractionDigits: 2 });
+}
+
+function buildSankeyNodeLabel(partNumber: string, description: string): string {
+  const pn = (partNumber ?? "").trim();
+  const desc = (description ?? "").trim();
+
+  if (!pn && !desc) return "—";
+  if (!pn) return desc;
+  if (!desc) return pn;
+  if (desc.toLowerCase().includes(pn.toLowerCase())) return desc;
+  return `${pn} - ${desc}`;
+}
+
+function renderSankeyNode(
+  props: SankeyNodeRenderProps,
+  onHoverLabel?: (label: string | null) => void,
+) {
+  const x = props.x ?? 0;
+  const y = props.y ?? 0;
+  const width = Math.max(1, props.width ?? 0);
+  const height = Math.max(1, props.height ?? 0);
+  const index = props.index ?? 0;
+
+  const rawName = typeof props.payload?.name === "string" ? props.payload.name : "—";
+  const fill = SANKEY_NODE_PALETTE[index % SANKEY_NODE_PALETTE.length];
+
+  return (
+    <g
+      className="custom-sankey-node"
+      onMouseEnter={() => onHoverLabel?.(rawName)}
+      onMouseLeave={() => onHoverLabel?.(null)}
+      style={{ cursor: "pointer" }}
+    >
+      <title>{rawName}</title>
+      <rect
+        x={x}
+        y={y}
+        width={width}
+        height={height}
+        rx={3}
+        ry={3}
+        fill={fill}
+        stroke="#9cb8f5"
+        strokeWidth={1.1}
+      />
+    </g>
+  );
+}
+
+function renderSankeyTooltip({ active, payload }: SankeyTooltipProps) {
+  if (!active || !payload || payload.length === 0) return null;
+
+  const entry = payload[0];
+  const raw = entry.payload;
+  const sourceName = raw?.source?.name;
+  const targetName = raw?.target?.name;
+  const nodeName = raw?.name ?? entry.name ?? "Part";
+  const title = sourceName && targetName ? `${sourceName} -> ${targetName}` : nodeName;
+
+  return (
+    <div className="sankey-tooltip">
+      <div className="sankey-tooltip-title">{title}</div>
+      <div className="sankey-tooltip-value">Quantity wasted: {formatSankeyValue(entry.value)}</div>
+    </div>
+  );
+}
+
 export default function ScrapExplorer() {
   const [chainMaterial, setChainMaterial] = useState<string | null>(null);
+  const [selectedYear, setSelectedYear] = useState<number | null>(null);
+  const [hoveredSankeyLabel, setHoveredSankeyLabel] = useState<string | null>(null);
+
+  const { data: yearsData } = useQuery<{ scrapYears: number[] }>(GET_SCRAP_YEARS);
+  const years = yearsData?.scrapYears ?? [];
 
   const { data: sankeyData, loading: sankeyLoading } = useQuery<{
     aggregateScrapSankey: ScrapSankeyData;
-  }>(GET_AGGREGATE_SCRAP_SANKEY);
+  }>(GET_AGGREGATE_SCRAP_SANKEY, {
+    variables: { year: selectedYear },
+  });
 
   const { data: scrapData, loading: scrapLoading } = useQuery<{
     scrapStats: ScrapStat[];
-  }>(GET_SCRAP_STATS, { variables: { limit: 200 } });
+  }>(GET_SCRAP_STATS, { variables: { limit: 200, year: selectedYear } });
 
   const { data: chainData, loading: chainLoading } = useQuery<{
     scrapChain: ScrapChainItem[];
@@ -29,7 +147,7 @@ export default function ScrapExplorer() {
     skip: !chainMaterial,
   });
 
-  const sankey = sankeyData?.aggregateScrapSankey;
+  const sankey  = sankeyData?.aggregateScrapSankey;
   const stats   = scrapData?.scrapStats ?? [];
   const chain   = chainData?.scrapChain ?? [];
   const hasData = stats.length > 0;
@@ -38,7 +156,10 @@ export default function ScrapExplorer() {
   // Build Recharts-compatible Sankey data
   const sankeyChartData = sankey && sankey.nodes.length > 0
     ? {
-        nodes: sankey.nodes.map((n) => ({ name: n.label })),
+        nodes: sankey.nodes.map((n, i) => ({
+          name: buildSankeyNodeLabel(n.id, n.label),
+          fill: SANKEY_NODE_PALETTE[i % SANKEY_NODE_PALETTE.length],
+        })),
         links: sankey.links.map((l) => {
           const si = sankey.nodes.findIndex((n) => n.id === l.source);
           const ti = sankey.nodes.findIndex((n) => n.id === l.target);
@@ -49,16 +170,60 @@ export default function ScrapExplorer() {
 
   return (
     <>
-      <div className="page-header"><h1>Scrap Explorer</h1></div>
+      <div className="page-header" style={{ display: "flex", alignItems: "center", gap: "1.5rem", flexWrap: "wrap" }}>
+        <h1 style={{ margin: 0 }}>Scrap Explorer</h1>
+
+        {/* Year filter */}
+        <div style={{ display: "flex", alignItems: "center", gap: ".5rem", marginLeft: "auto" }}>
+          <label style={{ fontSize: ".85rem", color: "var(--text-muted)", whiteSpace: "nowrap" }}>
+            Filter by year:
+          </label>
+          <select
+            value={selectedYear ?? ""}
+            onChange={(e) => {
+              const v = e.target.value;
+              setSelectedYear(v === "" ? null : parseInt(v, 10));
+              setChainMaterial(null);
+            }}
+            style={{
+              padding: ".3rem .6rem",
+              borderRadius: "6px",
+              border: "1px solid var(--border)",
+              background: "var(--bg2)",
+              color: "var(--text)",
+              fontSize: ".85rem",
+              cursor: "pointer",
+            }}
+          >
+            <option value="">All years</option>
+            {years.map((y) => (
+              <option key={y} value={y}>{y}</option>
+            ))}
+          </select>
+          {selectedYear && (
+            <button
+              className="btn btn-ghost"
+              style={{ fontSize: ".8rem", padding: ".25rem .5rem" }}
+              onClick={() => { setSelectedYear(null); setChainMaterial(null); }}
+            >
+              Clear
+            </button>
+          )}
+        </div>
+      </div>
 
       {!hasData && !scrapLoading && (
         <div className="card" style={{ textAlign: "center", padding: "2rem", color: "var(--text-muted)" }}>
           <div style={{ fontSize: "2rem", marginBottom: ".5rem" }}>⚠</div>
-          <strong>No scrap data loaded.</strong>
+          <strong>No scrap data{selectedYear ? ` for ${selectedYear}` : " loaded"}.</strong>
           <p style={{ marginTop: ".4rem", fontSize: ".88rem" }}>
-            Scrap.xlsx is loaded automatically at startup. If you see this, the file may be missing or empty.
-            You can also import a scrap CSV in{" "}
-            <a href="/data" style={{ color: "var(--accent)" }}>Data Management</a>.
+            {selectedYear
+              ? `No scrap records found for ${selectedYear}. Try a different year or clear the filter.`
+              : "Scrap.xlsx is loaded automatically at startup. If you see this, the file may be missing or empty. You can also import a scrap CSV in "}
+            {!selectedYear && (
+              <a href="/data" style={{ color: "var(--accent)" }}>Data Management</a>
+            )}
+            {!selectedYear && "."}
           </p>
         </div>
       )}
@@ -66,23 +231,43 @@ export default function ScrapExplorer() {
       {/* Sankey diagram */}
       {hasData && (
         <div className="card">
-          <h3 style={{ marginBottom: ".8rem" }}>Aggregate Scrap Flow (BOM-level)</h3>
+          <h3 style={{ marginBottom: ".8rem" }}>
+            Aggregate Scrap Flow (top 15 materials × BOM)
+            {selectedYear && <span style={{ marginLeft: ".6rem", fontSize: ".8rem", color: "var(--text-muted)", fontWeight: 400 }}>{selectedYear}</span>}
+          </h3>
           {sankeyLoading && <div className="spinner">Building Sankey…</div>}
           {sankeyChartData && sankeyChartData.links.length > 0 ? (
-            <ResponsiveContainer width="100%" height={500}>
-              <Sankey
-                data={sankeyChartData}
-                nodePadding={12}
-                margin={{ top: 8, right: 140, bottom: 8, left: 8 }}
-                link={{ stroke: "var(--accent)", strokeOpacity: 0.22 }}
-              >
-                <Tooltip
-                  formatter={(value: number) => [value.toLocaleString(undefined, { maximumFractionDigits: 2 }), "Quantity wasted"]}
-                />
-              </Sankey>
-            </ResponsiveContainer>
+            <div
+              className="scrap-sankey-wrap"
+              role="img"
+              aria-label={`Scrap flow chart${selectedYear ? ` for year ${selectedYear}` : ""}`}
+            >
+              {hoveredSankeyLabel && (
+                <div className="sankey-hover-banner">{hoveredSankeyLabel}</div>
+              )}
+              <ResponsiveContainer width="100%" height={500}>
+                <Sankey
+                  data={sankeyChartData}
+                  nameKey="name"
+                  nodePadding={14}
+                  nodeWidth={16}
+                  margin={{ top: 14, right: 24, bottom: 14, left: 12 }}
+                  node={(props) => renderSankeyNode(props, setHoveredSankeyLabel)}
+                  link={{ stroke: "#8fb2ff", strokeOpacity: 0.52 }}
+                >
+                  <Tooltip
+                    content={renderSankeyTooltip}
+                    cursor={{ stroke: "#bfd2ff", strokeOpacity: 0.35 }}
+                  />
+                </Sankey>
+              </ResponsiveContainer>
+            </div>
           ) : (
-            !sankeyLoading && <div style={{ color: "var(--text-muted)", fontSize: ".88rem" }}>No Sankey data available.</div>
+            !sankeyLoading && (
+              <div style={{ color: "var(--text-muted)", fontSize: ".88rem" }}>
+                No Sankey data available — BOM data may not be linked to these materials.
+              </div>
+            )
           )}
         </div>
       )}
@@ -90,7 +275,10 @@ export default function ScrapExplorer() {
       {/* Scrap stats table */}
       {hasData && (
         <div className="card" style={{ marginTop: "1rem" }}>
-          <h3 style={{ marginBottom: ".8rem" }}>Scrap by Material</h3>
+          <h3 style={{ marginBottom: ".8rem" }}>
+            Scrap by Material
+            {selectedYear && <span style={{ marginLeft: ".6rem", fontSize: ".8rem", color: "var(--text-muted)", fontWeight: 400 }}>{selectedYear}</span>}
+          </h3>
           {scrapLoading && <div className="spinner">Loading…</div>}
           <div className="data-table-wrap">
             <table className="data-table">

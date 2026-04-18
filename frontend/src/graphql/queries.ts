@@ -143,9 +143,15 @@ export const GET_RAW_MATERIALS = gql`
   }
 `;
 
+export const GET_SCRAP_YEARS = gql`
+  query GetScrapYears {
+    scrapYears
+  }
+`;
+
 export const GET_SCRAP_STATS = gql`
-  query GetScrapStats($limit: Int) {
-    scrapStats(limit: $limit) {
+  query GetScrapStats($limit: Int, $year: Int) {
+    scrapStats(limit: $limit, year: $year) {
       material
       description
       materialType
@@ -203,8 +209,8 @@ export const GET_SCRAP_CHAIN = gql`
 `;
 
 export const GET_AGGREGATE_SCRAP_SANKEY = gql`
-  query GetAggregateScrapSankey {
-    aggregateScrapSankey {
+  query GetAggregateScrapSankey($year: Int) {
+    aggregateScrapSankey(year: $year) {
       nodes {
         id
         label

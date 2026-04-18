@@ -362,8 +362,12 @@ class Query:
         )
 
     @strawberry.field
-    def scrap_stats(self, limit: int = 100, offset: int = 0) -> List[ScrapStat]:
-        return [_to_scrap_stat(r) for r in scrap_res.get_scrap_stats(limit, offset)]
+    def scrap_years(self) -> List[int]:
+        return scrap_res.get_scrap_years()
+
+    @strawberry.field
+    def scrap_stats(self, limit: int = 100, offset: int = 0, year: Optional[int] = None) -> List[ScrapStat]:
+        return [_to_scrap_stat(r) for r in scrap_res.get_scrap_stats(limit, offset, year)]
 
     @strawberry.field
     def material_scrap(self, material_id: str) -> Optional[ScrapStat]:
@@ -388,8 +392,8 @@ class Query:
         return [_to_scrap_chain_item(r) for r in scrap_res.get_scrap_chain(material_id)]
 
     @strawberry.field
-    def aggregate_scrap_sankey(self) -> ScrapSankeyData:
-        d = scrap_res.get_aggregate_scrap_sankey()
+    def aggregate_scrap_sankey(self, year: Optional[int] = None) -> ScrapSankeyData:
+        d = scrap_res.get_aggregate_scrap_sankey(year)
         return ScrapSankeyData(
             nodes=[SankeyNode(**n) for n in d["nodes"]],
             links=[SankeyLink(**l) for l in d["links"]],
