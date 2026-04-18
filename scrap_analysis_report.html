@@ -1,0 +1,365 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><title>Scrap Analysis Report</title><style>
+body { font-family: Arial, sans-serif; margin: 40px; color: #222; background: #f5f5f5; }
+h1 { color: #c0392b; border-bottom: 3px solid #c0392b; padding-bottom: 10px; }
+h2 { color: #2c3e50; margin-top: 40px; }
+h3 { color: #e74c3c; margin: 0 0 6px 0; }
+.summary-box { display: flex; gap: 20px; margin: 20px 0; }
+.kpi { background: white; border-radius: 8px; padding: 20px 30px; text-align: center; box-shadow: 0 2px 6px rgba(0,0,0,0.1); flex: 1; }
+.kpi .value { font-size: 2em; font-weight: bold; color: #c0392b; }
+.kpi .label { font-size: 0.85em; color: #666; margin-top: 4px; }
+table { border-collapse: collapse; width: 100%; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 6px rgba(0,0,0,0.1); margin-bottom: 30px; }
+th { background: #2c3e50; color: white; padding: 10px 14px; text-align: left; font-size: 0.9em; }
+td { padding: 9px 14px; border-bottom: 1px solid #eee; font-size: 0.88em; }
+tr:hover td { background: #fdf6f6; }
+.rate-high { color: #c0392b; font-weight: bold; }
+.rate-med  { color: #e67e22; font-weight: bold; }
+.rate-low  { color: #27ae60; font-weight: bold; }
+.card { background: white; border-radius: 8px; padding: 20px; margin-bottom: 18px; box-shadow: 0 2px 6px rgba(0,0,0,0.1); border-left: 5px solid #c0392b; }
+.card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.badge { background: #c0392b; color: white; border-radius: 20px; padding: 3px 12px; font-size: 0.82em; font-weight: bold; }
+.badge-warn { background: #e67e22; color: white; border-radius: 20px; padding: 3px 12px; font-size: 0.82em; font-weight: bold; }
+.ingr-table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+.ingr-table th { background: #ecf0f1; color: #2c3e50; padding: 6px 10px; font-size: 0.82em; }
+.ingr-table td { padding: 5px 10px; font-size: 0.82em; border-bottom: 1px solid #f0f0f0; }
+.no-bom { color: #999; font-style: italic; }
+.insight { background: #fff8e1; border-left: 4px solid #f39c12; padding: 14px 18px; border-radius: 4px; margin: 20px 0; font-size: 0.92em; }
+.group-title { background: #2c3e50; color: white; padding: 8px 14px; border-radius: 4px; margin: 24px 0 10px 0; font-size: 0.95em; }
+.footer { text-align: center; color: #999; font-size: 0.8em; margin-top: 40px; border-top: 1px solid #ddd; padding-top: 16px; }
+</style></head><body>
+<h1>&#9888; Scrap Analysis Report &mdash; Production Orders 2025</h1>
+<p style="color:#666">Materials with highest scrap rates (minimum 100 units produced) &bull; Source: Production orders 2025 + Bill of Material SRP100_1201</p>
+<div class="summary-box">
+<div class="kpi"><div class="value">20</div><div class="label">High-Scrap Materials</div></div>
+<div class="kpi"><div class="value">4,878</div><div class="label">Total Units Scrapped</div></div>
+<div class="kpi"><div class="value">31,457</div><div class="label">Total Units Produced</div></div>
+<div class="kpi"><div class="value">15.5%</div><div class="label">Avg Scrap Rate (top 20)</div></div>
+</div>
+<div class="insight">
+<strong>Key Findings:</strong> Scrap is concentrated in three part families &mdash;
+<strong>Spacers</strong> (up to 34.6% scrap rate), <strong>Shafts</strong> (up to 20.2%),
+and <strong>Gear Sets / Spool-Sleeve Sets</strong> (7&ndash;17%).
+All high-scrap parts are machined from steel blanks or round bar stock, suggesting the root cause lies in
+<strong>machining and grinding operations</strong>. The #1 material (SPACER OMV) alone accounts for 2,115 scrapped units.
+</div>
+<h2>Top 20 Scrap Rate Summary</h2>
+<table><tr><th>#</th><th>Material Number</th><th>Description</th><th>Produced</th><th>Scrapped</th><th>Scrap Rate</th></tr>
+<tr><td>1</td><td><code>151B1391</code></td><td>SPACER OMV</td><td>6,115</td><td>2,115</td><td class="rate-high">34.6%</td></tr>
+<tr><td>2</td><td><code>151B1924</code></td><td>SPACER</td><td>3,528</td><td>878</td><td class="rate-high">24.9%</td></tr>
+<tr><td>3</td><td><code>151B1634</code></td><td>SHAFT OMT KONISK SPEC.</td><td>168</td><td>34</td><td class="rate-high">20.2%</td></tr>
+<tr><td>4</td><td><code>11057089</code></td><td>SHAFT TMTW</td><td>145</td><td>27</td><td class="rate-high">18.6%</td></tr>
+<tr><td>5</td><td><code>150-4197</code></td><td>GEAR SET OSPL 1000 H= 134,0MM</td><td>769</td><td>134</td><td class="rate-high">17.4%</td></tr>
+<tr><td>6</td><td><code>151F6405</code></td><td>BLANK FOR CARDAN TMK  (151F6406) HT</td><td>506</td><td>84</td><td class="rate-high">16.6%</td></tr>
+<tr><td>7</td><td><code>11057079</code></td><td>SHAFT  TMT TAPERED</td><td>655</td><td>101</td><td class="rate-high">15.4%</td></tr>
+<tr><td>8</td><td><code>150N7465</code></td><td>SPOOL/SLEEVE SET</td><td>447</td><td>61</td><td class="rate-med">13.6%</td></tr>
+<tr><td>9</td><td><code>150-4192</code></td><td>GEAR WHEEL SET</td><td>840</td><td>91</td><td class="rate-med">10.8%</td></tr>
+<tr><td>10</td><td><code>11273127</code></td><td>SPOOL/SLEEVE SET</td><td>1,292</td><td>125</td><td class="rate-med">9.7%</td></tr>
+<tr><td>11</td><td><code>150-4142</code></td><td>GEAR SET, OSP, SEALED STAR</td><td>192</td><td>18</td><td class="rate-med">9.4%</td></tr>
+<tr><td>12</td><td><code>151B1951</code></td><td>AKSEL  OMT SPLINES</td><td>126</td><td>11</td><td class="rate-med">8.7%</td></tr>
+<tr><td>13</td><td><code>150-4243</code></td><td>GEAR SET, OSP, STANDARD</td><td>504</td><td>40</td><td class="rate-low">7.9%</td></tr>
+<tr><td>14</td><td><code>151B1347</code></td><td>CARDAN SHAFT (OMT) (B26)</td><td>6,175</td><td>479</td><td class="rate-low">7.8%</td></tr>
+<tr><td>15</td><td><code>11057087</code></td><td>SHAFT TMT KONISK SPEC. SAE</td><td>131</td><td>10</td><td class="rate-low">7.6%</td></tr>
+<tr><td>16</td><td><code>150G1316</code></td><td>SPOOL/SLEEVE SET</td><td>329</td><td>25</td><td class="rate-low">7.6%</td></tr>
+<tr><td>17</td><td><code>11231877</code></td><td>GEAR WHEEL SET OSP</td><td>1,536</td><td>112</td><td class="rate-low">7.3%</td></tr>
+<tr><td>18</td><td><code>11091248</code></td><td>SPOOL/SLEEVE SET</td><td>360</td><td>25</td><td class="rate-low">6.9%</td></tr>
+<tr><td>19</td><td><code>150-4196</code></td><td>GEAR SET OSPL 800 H= 104,0MM</td><td>5,249</td><td>353</td><td class="rate-low">6.7%</td></tr>
+<tr><td>20</td><td><code>151B1493</code></td><td>SHAFT OMT SPLINES</td><td>2,390</td><td>155</td><td class="rate-low">6.5%</td></tr>
+</table>
+<h2>Bill of Materials &mdash; Ingredient Breakdown</h2>
+<p style="color:#666;font-size:0.9em">All sub-components required to produce each high-scrap material, traced to raw material level.</p>
+<div class="group-title">&#9654; Spacers</div>
+<div class="card">
+<div class="card-header">
+  <div><h3>#1 &nbsp; SPACER OMV</h3>
+  <code style="color:#666;font-size:0.85em">151B1391</code></div>
+  <div style="text-align:right">
+    <span class="badge">34.6% scrap</span><br>
+    <span style="font-size:0.8em;color:#999">2,115 scrapped / 6,115 produced</span>
+  </div>
+</div>
+<p class="no-bom">&#9888; No BOM entries found for this material.</p>
+</div>
+<div class="card">
+<div class="card-header">
+  <div><h3>#2 &nbsp; SPACER</h3>
+  <code style="color:#666;font-size:0.85em">151B1924</code></div>
+  <div style="text-align:right">
+    <span class="badge">24.9% scrap</span><br>
+    <span style="font-size:0.8em;color:#999">878 scrapped / 3,528 produced</span>
+  </div>
+</div>
+<table class="ingr-table"><tr><th>Level</th><th>Component</th><th>Description</th><th>MRP</th><th>Qty / Unit</th></tr>
+<tr><td>L0</td><td><code>151B8309</code></td><td>BLANK FOR SPACER TUBE</td><td>YF0</td><td>1.000</td></tr>
+</table>
+</div>
+<div class="group-title">&#9654; Shafts</div>
+<div class="card">
+<div class="card-header">
+  <div><h3>#3 &nbsp; SHAFT OMT KONISK SPEC.</h3>
+  <code style="color:#666;font-size:0.85em">151B1634</code></div>
+  <div style="text-align:right">
+    <span class="badge">20.2% scrap</span><br>
+    <span style="font-size:0.8em;color:#999">34 scrapped / 168 produced</span>
+  </div>
+</div>
+<table class="ingr-table"><tr><th>Level</th><th>Component</th><th>Description</th><th>MRP</th><th>Qty / Unit</th></tr>
+<tr><td>L0</td><td><code>151B1889</code></td><td>BLANK FOR SHAFT, OMT</td><td>YHT</td><td>1.000</td></tr>
+</table>
+</div>
+<div class="card">
+<div class="card-header">
+  <div><h3>#4 &nbsp; SHAFT TMTW</h3>
+  <code style="color:#666;font-size:0.85em">11057089</code></div>
+  <div style="text-align:right">
+    <span class="badge">18.6% scrap</span><br>
+    <span style="font-size:0.8em;color:#999">27 scrapped / 145 produced</span>
+  </div>
+</div>
+<table class="ingr-table"><tr><th>Level</th><th>Component</th><th>Description</th><th>MRP</th><th>Qty / Unit</th></tr>
+<tr><td>L0</td><td><code>151B1886</code></td><td>BLANK FOR SHAFT</td><td>YHT</td><td>1.000</td></tr>
+</table>
+</div>
+<div class="card">
+<div class="card-header">
+  <div><h3>#6 &nbsp; BLANK FOR CARDAN TMK  (151F6406) HT</h3>
+  <code style="color:#666;font-size:0.85em">151F6405</code></div>
+  <div style="text-align:right">
+    <span class="badge">16.6% scrap</span><br>
+    <span style="font-size:0.8em;color:#999">84 scrapped / 506 produced</span>
+  </div>
+</div>
+<table class="ingr-table"><tr><th>Level</th><th>Component</th><th>Description</th><th>MRP</th><th>Qty / Unit</th></tr>
+<tr><td>L0</td><td><code>818F4613</code></td><td>ROUND BAR Ø34</td><td>YHB</td><td>1.050</td></tr>
+</table>
+</div>
+<div class="card">
+<div class="card-header">
+  <div><h3>#7 &nbsp; SHAFT  TMT TAPERED</h3>
+  <code style="color:#666;font-size:0.85em">11057079</code></div>
+  <div style="text-align:right">
+    <span class="badge">15.4% scrap</span><br>
+    <span style="font-size:0.8em;color:#999">101 scrapped / 655 produced</span>
+  </div>
+</div>
+<table class="ingr-table"><tr><th>Level</th><th>Component</th><th>Description</th><th>MRP</th><th>Qty / Unit</th></tr>
+<tr><td>L0</td><td><code>151B1889</code></td><td>BLANK FOR SHAFT, OMT</td><td>YHT</td><td>1.000</td></tr>
+</table>
+</div>
+<div class="card">
+<div class="card-header">
+  <div><h3>#12 &nbsp; AKSEL  OMT SPLINES</h3>
+  <code style="color:#666;font-size:0.85em">151B1951</code></div>
+  <div style="text-align:right">
+    <span class="badge-warn">8.7% scrap</span><br>
+    <span style="font-size:0.8em;color:#999">11 scrapped / 126 produced</span>
+  </div>
+</div>
+<table class="ingr-table"><tr><th>Level</th><th>Component</th><th>Description</th><th>MRP</th><th>Qty / Unit</th></tr>
+<tr><td>L0</td><td><code>151B1885</code></td><td>BLANK FOR SHAFT, OMT</td><td>YHT</td><td>1.000</td></tr>
+</table>
+</div>
+<div class="card">
+<div class="card-header">
+  <div><h3>#14 &nbsp; CARDAN SHAFT (OMT) (B26)</h3>
+  <code style="color:#666;font-size:0.85em">151B1347</code></div>
+  <div style="text-align:right">
+    <span class="badge-warn">7.8% scrap</span><br>
+    <span style="font-size:0.8em;color:#999">479 scrapped / 6,175 produced</span>
+  </div>
+</div>
+<table class="ingr-table"><tr><th>Level</th><th>Component</th><th>Description</th><th>MRP</th><th>Qty / Unit</th></tr>
+<tr><td>L0</td><td><code>818F4610</code></td><td>ROUND BAR Ø39</td><td>YHB</td><td>1.061</td></tr>
+</table>
+</div>
+<div class="card">
+<div class="card-header">
+  <div><h3>#15 &nbsp; SHAFT TMT KONISK SPEC. SAE</h3>
+  <code style="color:#666;font-size:0.85em">11057087</code></div>
+  <div style="text-align:right">
+    <span class="badge-warn">7.6% scrap</span><br>
+    <span style="font-size:0.8em;color:#999">10 scrapped / 131 produced</span>
+  </div>
+</div>
+<table class="ingr-table"><tr><th>Level</th><th>Component</th><th>Description</th><th>MRP</th><th>Qty / Unit</th></tr>
+<tr><td>L0</td><td><code>151B1889</code></td><td>BLANK FOR SHAFT, OMT</td><td>YHT</td><td>1.000</td></tr>
+</table>
+</div>
+<div class="card">
+<div class="card-header">
+  <div><h3>#20 &nbsp; SHAFT OMT SPLINES</h3>
+  <code style="color:#666;font-size:0.85em">151B1493</code></div>
+  <div style="text-align:right">
+    <span class="badge-warn">6.5% scrap</span><br>
+    <span style="font-size:0.8em;color:#999">155 scrapped / 2,390 produced</span>
+  </div>
+</div>
+<table class="ingr-table"><tr><th>Level</th><th>Component</th><th>Description</th><th>MRP</th><th>Qty / Unit</th></tr>
+<tr><td>L0</td><td><code>151B1888</code></td><td>BLANK FOR SHAFT OMT</td><td>YHT</td><td>1.000</td></tr>
+</table>
+</div>
+<div class="group-title">&#9654; Gear Sets</div>
+<div class="card">
+<div class="card-header">
+  <div><h3>#5 &nbsp; GEAR SET OSPL 1000 H= 134,0MM</h3>
+  <code style="color:#666;font-size:0.85em">150-4197</code></div>
+  <div style="text-align:right">
+    <span class="badge">17.4% scrap</span><br>
+    <span style="font-size:0.8em;color:#999">134 scrapped / 769 produced</span>
+  </div>
+</div>
+<table class="ingr-table"><tr><th>Level</th><th>Component</th><th>Description</th><th>MRP</th><th>Qty / Unit</th></tr>
+<tr><td>L0</td><td><code>150-1567</code></td><td>GEAR WHEEL 11321527</td><td>YT6</td><td>1.000</td></tr>
+<tr><td>L0</td><td><code>150-0520</code></td><td>GEAR RIM</td><td>YT6</td><td>1.000</td></tr>
+<tr><td>L1</td><td>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&#8627; <code>11321527</code></td><td>GEAR WHEEL</td><td>YSC</td><td>1.000</td></tr>
+<tr><td>L1</td><td>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&#8627; <code>11068545</code></td><td>GEAR RIM</td><td>YY8</td><td>1.000</td></tr>
+<tr><td>L2</td><td>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&#8627; <code>150-1877</code></td><td>BLANK FOR GEAR RIM</td><td>YTR</td><td>1.000</td></tr>
+</table>
+</div>
+<div class="card">
+<div class="card-header">
+  <div><h3>#9 &nbsp; GEAR WHEEL SET</h3>
+  <code style="color:#666;font-size:0.85em">150-4192</code></div>
+  <div style="text-align:right">
+    <span class="badge-warn">10.8% scrap</span><br>
+    <span style="font-size:0.8em;color:#999">91 scrapped / 840 produced</span>
+  </div>
+</div>
+<table class="ingr-table"><tr><th>Level</th><th>Component</th><th>Description</th><th>MRP</th><th>Qty / Unit</th></tr>
+<tr><td>L0</td><td><code>150-0939</code></td><td>GEAR WHEEL 11321532</td><td>YT6</td><td>1.000</td></tr>
+<tr><td>L0</td><td><code>150-0519</code></td><td>GEAR RIM</td><td>YY8</td><td>1.000</td></tr>
+<tr><td>L1</td><td>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&#8627; <code>11321532</code></td><td>GEAR WHEEL</td><td>YSC</td><td>1.000</td></tr>
+<tr><td>L1</td><td>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&#8627; <code>11068544</code></td><td>GEAR RIM</td><td>YSD</td><td>1.000</td></tr>
+<tr><td>L2</td><td>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&#8627; <code>150-1876</code></td><td>BLANK FOR GEAR RIM</td><td>YTR</td><td>1.000</td></tr>
+</table>
+</div>
+<div class="card">
+<div class="card-header">
+  <div><h3>#11 &nbsp; GEAR SET, OSP, SEALED STAR</h3>
+  <code style="color:#666;font-size:0.85em">150-4142</code></div>
+  <div style="text-align:right">
+    <span class="badge-warn">9.4% scrap</span><br>
+    <span style="font-size:0.8em;color:#999">18 scrapped / 192 produced</span>
+  </div>
+</div>
+<table class="ingr-table"><tr><th>Level</th><th>Component</th><th>Description</th><th>MRP</th><th>Qty / Unit</th></tr>
+<tr><td>L0</td><td><code>11171863</code></td><td>GEAR WHEEL</td><td>YY6</td><td>1.000</td></tr>
+<tr><td>L0</td><td><code>150-1686</code></td><td>GEAR RIM</td><td>YY8</td><td>1.000</td></tr>
+<tr><td>L1</td><td>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&#8627; <code>11068529</code></td><td>GEAR RIM (125)</td><td>YSD</td><td>1.000</td></tr>
+<tr><td>L2</td><td>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&#8627; <code>150-1830</code></td><td>BLANK FOR GEAR RIM</td><td>YTR</td><td>1.000</td></tr>
+</table>
+</div>
+<div class="card">
+<div class="card-header">
+  <div><h3>#13 &nbsp; GEAR SET, OSP, STANDARD</h3>
+  <code style="color:#666;font-size:0.85em">150-4243</code></div>
+  <div style="text-align:right">
+    <span class="badge-warn">7.9% scrap</span><br>
+    <span style="font-size:0.8em;color:#999">40 scrapped / 504 produced</span>
+  </div>
+</div>
+<table class="ingr-table"><tr><th>Level</th><th>Component</th><th>Description</th><th>MRP</th><th>Qty / Unit</th></tr>
+<tr><td>L0</td><td><code>150-1897</code></td><td>GEAR WHEEL</td><td>YT6</td><td>1.000</td></tr>
+<tr><td>L0</td><td><code>150-1899</code></td><td>GEAR RIM</td><td>YY8</td><td>1.000</td></tr>
+<tr><td>L1</td><td>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&#8627; <code>11321524</code></td><td>GEAR WHEEL</td><td>YSC</td><td>1.000</td></tr>
+<tr><td>L1</td><td>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&#8627; <code>11068540</code></td><td>GEAR RIM</td><td>YSD</td><td>1.000</td></tr>
+<tr><td>L2</td><td>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&#8627; <code>150-1898</code></td><td>BLANK FOR GEAR RIM</td><td>YTR</td><td>1.000</td></tr>
+</table>
+</div>
+<div class="card">
+<div class="card-header">
+  <div><h3>#17 &nbsp; GEAR WHEEL SET OSP</h3>
+  <code style="color:#666;font-size:0.85em">11231877</code></div>
+  <div style="text-align:right">
+    <span class="badge-warn">7.3% scrap</span><br>
+    <span style="font-size:0.8em;color:#999">112 scrapped / 1,536 produced</span>
+  </div>
+</div>
+<table class="ingr-table"><tr><th>Level</th><th>Component</th><th>Description</th><th>MRP</th><th>Qty / Unit</th></tr>
+<tr><td>L0</td><td><code>11082171</code></td><td>GEAR RIM</td><td>YY8</td><td>1.000</td></tr>
+<tr><td>L0</td><td><code>11231932</code></td><td>GEAR WHEEL</td><td>YY6</td><td>1.000</td></tr>
+<tr><td>L1</td><td>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&#8627; <code>11082172</code></td><td>GEAR RIM (90)</td><td>YSD</td><td>1.000</td></tr>
+</table>
+</div>
+<div class="card">
+<div class="card-header">
+  <div><h3>#19 &nbsp; GEAR SET OSPL 800 H= 104,0MM</h3>
+  <code style="color:#666;font-size:0.85em">150-4196</code></div>
+  <div style="text-align:right">
+    <span class="badge-warn">6.7% scrap</span><br>
+    <span style="font-size:0.8em;color:#999">353 scrapped / 5,249 produced</span>
+  </div>
+</div>
+<table class="ingr-table"><tr><th>Level</th><th>Component</th><th>Description</th><th>MRP</th><th>Qty / Unit</th></tr>
+<tr><td>L0</td><td><code>150-1566</code></td><td>GEAR WHEEL 11321535</td><td>YT6</td><td>1.000</td></tr>
+<tr><td>L0</td><td><code>150-0519</code></td><td>GEAR RIM</td><td>YY8</td><td>1.000</td></tr>
+<tr><td>L1</td><td>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&#8627; <code>11321535</code></td><td>GEAR WHEEL</td><td>YSC</td><td>1.000</td></tr>
+<tr><td>L1</td><td>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&#8627; <code>11068544</code></td><td>GEAR RIM</td><td>YSD</td><td>1.000</td></tr>
+<tr><td>L2</td><td>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&#8627; <code>150-1876</code></td><td>BLANK FOR GEAR RIM</td><td>YTR</td><td>1.000</td></tr>
+</table>
+</div>
+<div class="group-title">&#9654; Spool / Sleeve Sets</div>
+<div class="card">
+<div class="card-header">
+  <div><h3>#8 &nbsp; SPOOL/SLEEVE SET</h3>
+  <code style="color:#666;font-size:0.85em">150N7465</code></div>
+  <div style="text-align:right">
+    <span class="badge-warn">13.6% scrap</span><br>
+    <span style="font-size:0.8em;color:#999">61 scrapped / 447 produced</span>
+  </div>
+</div>
+<table class="ingr-table"><tr><th>Level</th><th>Component</th><th>Description</th><th>MRP</th><th>Qty / Unit</th></tr>
+<tr><td>L0</td><td><code>150N0342</code></td><td>SPOOL</td><td>YT4</td><td>1.000</td></tr>
+<tr><td>L0</td><td><code>150N0414</code></td><td>SLEEVE</td><td>YT9</td><td>1.000</td></tr>
+<tr><td>L1</td><td>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&#8627; <code>150N0341</code></td><td>SPOOL</td><td>YSB</td><td>1.000</td></tr>
+<tr><td>L1</td><td>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&#8627; <code>813B9892</code></td><td>STEEL</td><td>YSB</td><td>0.556</td></tr>
+</table>
+</div>
+<div class="card">
+<div class="card-header">
+  <div><h3>#10 &nbsp; SPOOL/SLEEVE SET</h3>
+  <code style="color:#666;font-size:0.85em">11273127</code></div>
+  <div style="text-align:right">
+    <span class="badge-warn">9.7% scrap</span><br>
+    <span style="font-size:0.8em;color:#999">125 scrapped / 1,292 produced</span>
+  </div>
+</div>
+<table class="ingr-table"><tr><th>Level</th><th>Component</th><th>Description</th><th>MRP</th><th>Qty / Unit</th></tr>
+<tr><td>L0</td><td><code>11150487</code></td><td>SLEEVE OSP CN stepIII-grinded W.profile</td><td>YT9</td><td>1.000</td></tr>
+<tr><td>L0</td><td><code>11273057</code></td><td>SPOOL</td><td>YT4</td><td>1.000</td></tr>
+<tr><td>L1</td><td>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&#8627; <code>11128674</code></td><td>SPOOL</td><td>YSB</td><td>1.000</td></tr>
+<tr><td>L1</td><td>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&#8627; <code>813B9892</code></td><td>STEEL</td><td>YSB</td><td>0.556</td></tr>
+</table>
+</div>
+<div class="card">
+<div class="card-header">
+  <div><h3>#16 &nbsp; SPOOL/SLEEVE SET</h3>
+  <code style="color:#666;font-size:0.85em">150G1316</code></div>
+  <div style="text-align:right">
+    <span class="badge-warn">7.6% scrap</span><br>
+    <span style="font-size:0.8em;color:#999">25 scrapped / 329 produced</span>
+  </div>
+</div>
+<table class="ingr-table"><tr><th>Level</th><th>Component</th><th>Description</th><th>MRP</th><th>Qty / Unit</th></tr>
+<tr><td>L0</td><td><code>150G1308</code></td><td>SPOOL</td><td>YT4</td><td>1.000</td></tr>
+<tr><td>L0</td><td><code>150G1310</code></td><td>SLEEVE</td><td>YT9</td><td>1.000</td></tr>
+<tr><td>L1</td><td>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&#8627; <code>150N0361</code></td><td>INNER SPOOL</td><td>YSB</td><td>1.000</td></tr>
+<tr><td>L1</td><td>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&#8627; <code>813B9892</code></td><td>STEEL</td><td>YSB</td><td>0.556</td></tr>
+</table>
+</div>
+<div class="card">
+<div class="card-header">
+  <div><h3>#18 &nbsp; SPOOL/SLEEVE SET</h3>
+  <code style="color:#666;font-size:0.85em">11091248</code></div>
+  <div style="text-align:right">
+    <span class="badge-warn">6.9% scrap</span><br>
+    <span style="font-size:0.8em;color:#999">25 scrapped / 360 produced</span>
+  </div>
+</div>
+<table class="ingr-table"><tr><th>Level</th><th>Component</th><th>Description</th><th>MRP</th><th>Qty / Unit</th></tr>
+<tr><td>L0</td><td><code>11091246</code></td><td>sleeve to OSPEF</td><td>YT9</td><td>1.000</td></tr>
+<tr><td>L0</td><td><code>11091247</code></td><td>SPOOL OSPEF</td><td>YT4</td><td>1.000</td></tr>
+<tr><td>L1</td><td>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&#8627; <code>11008827</code></td><td>BLANK FOR SPOOL</td><td>YSB</td><td>1.000</td></tr>
+<tr><td>L1</td><td>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&#8627; <code>813B9892</code></td><td>STEEL</td><td>YSB</td><td>0.629</td></tr>
+</table>
+</div>
+<div class="footer">Generated from Production Orders 2025 &bull; Bill of Material SRP100_1201 &bull; Danfoss Power Solutions</div>
+</body></html>
