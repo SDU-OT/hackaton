@@ -12,4 +12,4 @@ app.add_url_rule(
 )
 
 if __name__ == "__main__":
-    app.run(debug=False, port=5000, threaded=True)
+    app.run(debug=False, port=5000, threaded=False)

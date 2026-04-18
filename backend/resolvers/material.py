@@ -5,7 +5,7 @@ def search_materials(search_query: str, limit: int = 20, offset: int = 0):
     rows = query("""
         SELECT
             mm.material, mm.description, mm.material_type, mm.material_group,
-            mm.status, mm.weight_kg, mm.plant,
+            mm.status, mm.weight_kg, mm.plant, mm.mrp_controller,
             EXISTS(SELECT 1 FROM bom WHERE material = mm.material LIMIT 1)    AS has_bom,
             EXISTS(SELECT 1 FROM routing WHERE material = mm.material LIMIT 1) AS has_routing
         FROM material_master mm
@@ -33,7 +33,7 @@ def get_material(material_id: str):
     rows = query("""
         SELECT
             mm.material, mm.description, mm.material_type, mm.material_group,
-            mm.status, mm.weight_kg, mm.plant,
+            mm.status, mm.weight_kg, mm.plant, mm.mrp_controller,
             EXISTS(SELECT 1 FROM bom WHERE material = mm.material LIMIT 1)    AS has_bom,
             EXISTS(SELECT 1 FROM routing WHERE material = mm.material LIMIT 1) AS has_routing
         FROM material_master mm
@@ -121,8 +121,9 @@ def _row_to_material(r):
         "status":         str(r[4]) if r[4] is not None else None,
         "weight_kg":      float(r[5]) if r[5] is not None else None,
         "plant":          str(r[6]) if r[6] is not None else None,
-        "has_bom":        bool(r[7]),
-        "has_routing":    bool(r[8]),
+        "mrp_controller": str(r[7]) if r[7] is not None else None,
+        "has_bom":        bool(r[8]),
+        "has_routing":    bool(r[9]),
     }
 
 

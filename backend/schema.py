@@ -20,6 +20,7 @@ class MaterialType:
     status: Optional[str]
     weight_kg: Optional[float]
     plant: Optional[str]
+    mrp_controller: Optional[str]
     has_bom: bool
     has_routing: bool
 
@@ -49,6 +50,8 @@ class BomExplosionItem:
     component: str
     description: Optional[str]
     material_type: Optional[str]
+    material_group: Optional[str]
+    mrp_controller: Optional[str]
     unit: str
     qty_per_parent: float
     total_quantity: float
@@ -79,6 +82,7 @@ class ProductionPlanComponent:
     component: str
     description: Optional[str]
     material_type: Optional[str]
+    material_group: Optional[str]
     unit: str
     total_quantity: float
     depth: int

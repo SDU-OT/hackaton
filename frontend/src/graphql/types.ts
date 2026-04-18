@@ -6,6 +6,7 @@ export interface Material {
   status?: string | null;
   weightKg?: number | null;
   plant?: string | null;
+  mrpController?: string | null;
   hasBom: boolean;
   hasRouting: boolean;
 }
@@ -32,6 +33,7 @@ export interface BomExplosionItem {
   component: string;
   description?: string | null;
   materialType?: string | null;
+  mrpController?: string | null;
   unit: string;
   qtyPerParent: number;
   totalQuantity: number;
@@ -60,6 +62,7 @@ export interface ProductionPlanComponent {
   component: string;
   description?: string | null;
   materialType?: string | null;
+  materialGroup?: string | null;
   unit: string;
   totalQuantity: number;
   depth: number;

@@ -17,27 +17,72 @@ _lock = threading.Lock()
 def get_conn():
     global _conn
     if _conn is None:
-        print("Initializing DuckDB...")
-        _conn = duckdb.connect(database=":memory:", read_only=False)
-        _init(conn=_conn)
-        print("DuckDB ready.")
+        with _lock:
+            if _conn is None:
+                print("Initializing DuckDB...")
+                new_conn = duckdb.connect(database=":memory:", read_only=False)
+                try:
+                    _init(conn=new_conn)
+                except Exception:
+                    try:
+                        new_conn.close()
+                    finally:
+                        _conn = None
+                    raise
+                _conn = new_conn
+                print("DuckDB ready.")
     return _conn
 
 
 def query(sql: str, params=None):
-    conn = get_conn()
-    with _lock:
-        if params:
-            return conn.execute(sql, params).fetchall()
-        return conn.execute(sql).fetchall()
+    for attempt in range(2):
+        conn = get_conn()
+        with _lock:
+            try:
+                if params:
+                    return conn.execute(sql, params).fetchall()
+                return conn.execute(sql).fetchall()
+            except Exception as e:
+                if attempt == 0 and _is_recoverable_duckdb_error(e):
+                    print("Recovering DuckDB connection after fatal/internal error...")
+                    _reset_conn_locked()
+                    continue
+                raise
 
 
 def query_df(sql: str, params=None):
-    conn = get_conn()
-    with _lock:
-        if params:
-            return conn.execute(sql, params).df()
-        return conn.execute(sql).df()
+    for attempt in range(2):
+        conn = get_conn()
+        with _lock:
+            try:
+                if params:
+                    return conn.execute(sql, params).df()
+                return conn.execute(sql).df()
+            except Exception as e:
+                if attempt == 0 and _is_recoverable_duckdb_error(e):
+                    print("Recovering DuckDB connection after fatal/internal error...")
+                    _reset_conn_locked()
+                    continue
+                raise
+
+
+def _is_recoverable_duckdb_error(exc: Exception) -> bool:
+    msg = str(exc).lower()
+    return (
+        isinstance(exc, (duckdb.InternalException, duckdb.FatalException))
+        or "database has been invalidated" in msg
+        or "attempted to dereference shared_ptr that is null" in msg
+    )
+
+
+def _reset_conn_locked():
+    global _conn
+    if _conn is not None:
+        try:
+            _conn.close()
+        except Exception:
+            pass
+    _conn = None
 
 
 def _init(conn):
@@ -73,7 +118,10 @@ def _create_views(conn):
             CAST(MaterialGroup AS VARCHAR) AS material_group,
             CAST(Description  AS VARCHAR) AS description,
             CAST(Plant        AS VARCHAR) AS plant,
-            CAST(Status       AS VARCHAR) AS status
+            CAST(Status       AS VARCHAR) AS status,
+            CAST(PlannerGroup AS VARCHAR) AS planner_group,
+            CAST(MRPType      AS VARCHAR) AS mrp_type,
+            CAST(MRPController AS VARCHAR) AS mrp_controller
         FROM read_csv_auto('{MM_CSV}', header=true, ignore_errors=true)
     """)
 
@@ -132,6 +180,7 @@ def _load_excel(conn):
             "Basic start date":         "start_date",
             "Basic finish date":        "finish_date",
             "Order Type":               "order_type",
+            "MRP controller":           "mrp_controller",
             "System Status":            "sys_status",
             "Material description":     "mat_description",
         })
@@ -145,6 +194,7 @@ def _load_excel(conn):
                 COALESCE(order_qty, 0)    AS order_qty,
                 COALESCE(scrap_qty, 0)    AS scrap_qty,
                 COALESCE(delivered_qty, 0) AS delivered_qty,
+                NULLIF(TRIM(CAST(mrp_controller AS VARCHAR)), '') AS mrp_controller,
                 start_date,
                 finish_date,
                 order_type,
@@ -158,7 +208,8 @@ def _load_excel(conn):
         conn.execute("""
             CREATE OR REPLACE TABLE production_orders (
                 material VARCHAR, order_qty INTEGER, scrap_qty INTEGER,
-                delivered_qty INTEGER, start_date VARCHAR, finish_date VARCHAR,
+                delivered_qty INTEGER, mrp_controller VARCHAR,
+                start_date VARCHAR, finish_date VARCHAR,
                 order_type VARCHAR, sys_status VARCHAR, mat_description VARCHAR
             )
         """)
@@ -194,6 +245,37 @@ def _materialize(conn):
         FROM production_orders
         WHERE order_qty > 0
         GROUP BY material
+    """)
+
+    print("  Materializing MRP controller mapping...")
+    conn.execute("""
+        CREATE OR REPLACE TABLE production_mrp AS
+        WITH mrp_counts AS (
+            SELECT
+                material,
+                mrp_controller,
+                COUNT(*) AS hits
+            FROM production_orders
+            WHERE material IS NOT NULL
+              AND TRIM(material) != ''
+              AND mrp_controller IS NOT NULL
+              AND TRIM(mrp_controller) != ''
+            GROUP BY material, mrp_controller
+        ),
+        mrp_ranked AS (
+            SELECT
+                material,
+                mrp_controller,
+                hits,
+                ROW_NUMBER() OVER (
+                    PARTITION BY material
+                    ORDER BY hits DESC, mrp_controller
+                ) AS rn
+            FROM mrp_counts
+        )
+        SELECT material, mrp_controller
+        FROM mrp_ranked
+        WHERE rn = 1
     """)
 
     print("  Materializing raw materials set...")

@@ -205,9 +205,61 @@ a:hover { text-decoration: underline; }
 .bom-node.root { border-color: var(--accent); }
 .bom-node .node-id { font-weight: 700; color: var(--text-head); font-family: var(--mono); font-size: .8rem; }
 .bom-node .node-desc { color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: .1rem; }
+.bom-node .node-qty { color: #cbd5e1; font-family: var(--mono); font-size: .68rem; margin-top: .2rem; }
 .bom-node .node-bars { display: flex; gap: .25rem; margin-top: .35rem; height: 4px; border-radius: 2px; overflow: hidden; }
 .bom-node .bar-machine { background: var(--accent); }
 .bom-node .bar-labor   { background: var(--green); }
+.bom-handle {
+  width: 8px;
+  height: 8px;
+  background: var(--accent);
+  border: 1px solid var(--bg2);
+}
+.bom-edge-label {
+  position: absolute;
+  pointer-events: none;
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+}
+.mrp-group-node {
+  width: 100%;
+  height: 100%;
+  border: 1px dashed currentColor;
+  border-radius: 26px;
+  background: transparent;
+  padding: .45rem .7rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  pointer-events: none;
+}
+.mrp-group-title {
+  color: #f8fafc;
+  font-size: .74rem;
+  font-weight: 700;
+  letter-spacing: .02em;
+  font-family: var(--mono);
+}
+.mrp-group-meta {
+  color: #94a3b8;
+  font-size: .66rem;
+  margin-top: .12rem;
+}
+.mrp-chip-btn {
+  outline: none;
+  box-shadow: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.mrp-chip-btn:focus,
+.mrp-chip-btn:focus-visible,
+.mrp-chip-btn:active {
+  outline: none;
+  box-shadow: none;
+}
 
 /* ── Routing table ── */
 .time-pill {

@@ -4,7 +4,8 @@ from resolvers import material as mat_resolver
 
 
 def build_plan(material_id: str, quantity: float):
-    explosion = bom_resolver.explode(material_id, quantity, max_depth=15)
+    resolved_id = bom_resolver.resolve_material_id(material_id) or (material_id or "").strip()
+    explosion = bom_resolver.explode(resolved_id, quantity, max_depth=15)
 
     agg = defaultdict(lambda: {
         "total_quantity":    0.0,
@@ -13,6 +14,7 @@ def build_plan(material_id: str, quantity: float):
         "depth":             0,
         "description":       None,
         "material_type":     None,
+        "material_group":    None,
         "unit":              "",
     })
 
@@ -25,6 +27,7 @@ def build_plan(material_id: str, quantity: float):
         a["depth"]              = max(a["depth"], item["depth"])
         a["description"]        = item["description"]
         a["material_type"]      = item["material_type"]
+        a["material_group"]     = item["material_group"]
         a["unit"]               = item["unit"]
         max_depth_seen          = max(max_depth_seen, item["depth"])
 
@@ -34,6 +37,7 @@ def build_plan(material_id: str, quantity: float):
             "component":         component,
             "description":       data["description"],
             "material_type":     data["material_type"],
+            "material_group":    data["material_group"],
             "unit":              data["unit"],
             "total_quantity":    data["total_quantity"],
             "depth":             data["depth"],
@@ -46,9 +50,9 @@ def build_plan(material_id: str, quantity: float):
     total_machine = sum(c["total_machine_min"] for c in components)
     total_labor   = sum(c["total_labor_min"]   for c in components)
 
-    root = mat_resolver.get_material(material_id)
+    root = mat_resolver.get_material(resolved_id)
     return {
-        "root_material":       material_id,
+        "root_material":       resolved_id,
         "root_description":    root["description"] if root else None,
         "requested_quantity":  quantity,
         "components":          components,

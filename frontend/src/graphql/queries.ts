@@ -28,6 +28,7 @@ export const GET_MATERIAL = gql`
       status
       weightKg
       plant
+      mrpController
       hasBom
       hasRouting
     }
@@ -56,6 +57,7 @@ export const GET_BOM_EXPLOSION = gql`
       component
       description
       materialType
+      mrpController
       unit
       qtyPerParent
       totalQuantity
@@ -97,6 +99,7 @@ export const GET_PRODUCTION_PLAN = gql`
         component
         description
         materialType
+        materialGroup
         unit
         totalQuantity
         depth

@@ -10,13 +10,18 @@ import TypeBadge from "../components/TypeBadge";
 import Pagination from "../components/Pagination";
 
 const PAGE_SIZE = 50;
-type SortKey = "component" | "totalQuantity" | "depth" | "totalMachineMin" | "totalLaborMin";
+type SortKey = "component" | "materialGroup" | "totalQuantity" | "depth" | "totalMachineMin" | "totalLaborMin";
+
+function getMrpGroupLabel(component: ProductionPlanComponent): string {
+  return component.materialGroup?.trim() || "Unassigned";
+}
 
 export default function ProductionPlanner() {
   const [materialId, setMaterialId] = useState("");
   const [quantity, setQuantity]   = useState("1");
   const [sortKey, setSortKey]     = useState<SortKey>("depth");
   const [sortAsc, setSortAsc]     = useState(true);
+  const [mrpFilter, setMrpFilter] = useState("ALL");
   const [tableOffset, setTableOffset] = useState(0);
   const navigate = useNavigate();
 
@@ -30,23 +35,44 @@ export default function ProductionPlanner() {
     const qty = parseFloat(quantity);
     if (!materialId.trim() || isNaN(qty) || qty <= 0) return;
     setTableOffset(0);
+    setMrpFilter("ALL");
     runPlan({ variables: { materialId: materialId.trim(), quantity: qty } });
   }
 
   function toggleSort(key: SortKey) {
     setTableOffset(0);
     if (sortKey === key) setSortAsc(!sortAsc);
-    else { setSortKey(key); setSortAsc(key === "component"); }
+    else { setSortKey(key); setSortAsc(key === "component" || key === "materialGroup"); }
   }
 
   const sorted: ProductionPlanComponent[] = plan
     ? [...plan.components].sort((a, b) => {
-        const v1 = a[sortKey] as number | string;
-        const v2 = b[sortKey] as number | string;
-        const cmp = v1 < v2 ? -1 : v1 > v2 ? 1 : 0;
+        let cmp = 0;
+        if (sortKey === "component") {
+          cmp = a.component.localeCompare(b.component);
+        } else if (sortKey === "materialGroup") {
+          cmp = getMrpGroupLabel(a).localeCompare(getMrpGroupLabel(b));
+        } else {
+          const v1 = a[sortKey] as number;
+          const v2 = b[sortKey] as number;
+          cmp = v1 < v2 ? -1 : v1 > v2 ? 1 : 0;
+        }
         return sortAsc ? cmp : -cmp;
       })
     : [];
+
+  const mrpGroups = plan
+    ? Array.from(new Set(plan.components.map((c) => getMrpGroupLabel(c)))).sort((a, b) => a.localeCompare(b))
+    : [];
+
+  const groupedByMrp = plan
+    ? mrpGroups.map((group) => ({
+        group,
+        count: plan.components.filter((c) => getMrpGroupLabel(c) === group).length,
+      }))
+    : [];
+
+  const filtered = sorted.filter((c) => mrpFilter === "ALL" || getMrpGroupLabel(c) === mrpFilter);
 
   // Chart: machine + labor per depth level
   const depthChart = (() => {
@@ -155,14 +181,40 @@ export default function ProductionPlanner() {
           )}
 
           <div className="card">
-            <h3 style={{ marginBottom: ".75rem" }}>
-              Component Summary ({sorted.length.toLocaleString()} unique)
-            </h3>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: ".75rem", flexWrap: "wrap", marginBottom: ".75rem" }}>
+              <h3 style={{ margin: 0 }}>
+                Component Summary ({filtered.length.toLocaleString()} shown of {sorted.length.toLocaleString()} unique)
+              </h3>
+              <div className="planner-form">
+                <div className="form-group">
+                  <label>MRP Group Filter</label>
+                  <select
+                    value={mrpFilter}
+                    onChange={(e) => {
+                      setMrpFilter(e.target.value);
+                      setTableOffset(0);
+                    }}
+                    style={{ minWidth: 180 }}
+                  >
+                    <option value="ALL">All Groups</option>
+                    {mrpGroups.map((group) => (
+                      <option key={group} value={group}>{group}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+            {groupedByMrp.length > 0 && (
+              <div style={{ marginBottom: ".75rem", color: "var(--text-muted)", fontSize: ".82rem" }}>
+                {groupedByMrp.map((g) => `${g.group}: ${g.count}`).join("  |  ")}
+              </div>
+            )}
             <div className="data-table-wrap">
               <table className="data-table">
                 <thead>
                   <tr>
                     {th("component",       "Component")}
+                    {th("materialGroup",   "MRP Group")}
                     <th>Description</th>
                     <th>Type</th>
                     {th("depth",           "Depth")}
@@ -173,9 +225,10 @@ export default function ProductionPlanner() {
                   </tr>
                 </thead>
                 <tbody>
-                  {sorted.slice(tableOffset, tableOffset + PAGE_SIZE).map((c) => (
+                  {filtered.slice(tableOffset, tableOffset + PAGE_SIZE).map((c) => (
                     <tr key={c.component} className="clickable" onClick={() => navigate(`/materials/${c.component}`)}>
                       <td><code style={{ fontFamily: "var(--mono)", fontSize: ".8rem" }}>{c.component}</code></td>
+                      <td>{getMrpGroupLabel(c)}</td>
                       <td title={c.description ?? ""}>{c.description ?? "—"}</td>
                       <td><TypeBadge type={c.materialType} /></td>
                       <td>{c.depth}</td>
@@ -191,7 +244,7 @@ export default function ProductionPlanner() {
             <Pagination
               offset={tableOffset}
               pageSize={PAGE_SIZE}
-              total={sorted.length}
+              total={filtered.length}
               onPage={setTableOffset}
             />
           </div>

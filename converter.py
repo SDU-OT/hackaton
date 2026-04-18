@@ -1,4 +1,5 @@
 import pandas as pd
+import csv
 from pathlib import Path
 
 # Paths
@@ -28,10 +29,6 @@ bom_columns = [
 bom_df = bom_df.iloc[:, :len(bom_columns)]
 bom_df.columns = bom_columns
 
-# --- Parse Material Master ---
-# Material master is tab-separated and very wide
-mm_df = pd.read_csv(mm_path, sep='\t', header=None, dtype=str)
-
 # Assign practical subset of headers (core fields)
 mm_columns = [
     'Material',
@@ -43,12 +40,27 @@ mm_columns = [
     'MaterialGroup',
     'Description',
     'Plant',
-    'Status'
+    'Status',
+    'PlannerGroup',
+    'MRPType',
+    'MRPController',
 ]
 
-# Map only available columns
-mm_df = mm_df.iloc[:, :len(mm_columns)]
-mm_df.columns = mm_columns
+# --- Parse Material Master ---
+# Material master is tab-separated and very wide; some rows have uneven widths.
+# Read via csv module and safely trim/pad to required columns.
+mm_rows = []
+with mm_path.open('r', encoding='utf-8', errors='ignore', newline='') as fh:
+    reader = csv.reader(fh, delimiter='\t')
+    for row in reader:
+        if len(row) < len(mm_columns):
+            row = row + [''] * (len(mm_columns) - len(row))
+        mm_rows.append(row[:len(mm_columns)])
+
+mm_df = pd.DataFrame(mm_rows, columns=mm_columns)
+
+# Ensure string dtype for consistent downstream parsing.
+mm_df = mm_df.astype(str)
 
 # --- Save CSVs ---
 bom_csv = 'Bill_of_material_SRP100_1201.csv'
