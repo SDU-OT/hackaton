@@ -134,7 +134,19 @@ export default function MaterialBrowser() {
       <aside className="materials-sidebar">
 
         <div>
-          <h3>Date Range</h3>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 12 }}>
+            <h3 style={{ margin: 0 }}>Date Range</h3>
+            {hasFilters && (
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={clearFilters}
+                style={{ padding: "6px 10px", fontSize: 11, letterSpacing: "0.04em" }}
+              >
+                Clear Filters
+              </button>
+            )}
+          </div>
           <div className="filter-date-group">
             <div>
               <div className="filter-date-label">From</div>
@@ -224,11 +236,6 @@ export default function MaterialBrowser() {
           ))}
         </div>
 
-        {hasFilters && (
-          <button className="btn btn-secondary" onClick={clearFilters} style={{ marginTop: "auto" }}>
-            Clear Filters
-          </button>
-        )}
       </aside>
 
       {/* Main content */}
