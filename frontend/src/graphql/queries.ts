@@ -257,6 +257,45 @@ export const REMOVE_DATASET = gql`
   }
 `;
 
+export const MATERIAL_CATALOG = gql`
+  query MaterialCatalog(
+    $query: String
+    $materialType: String
+    $mrpController: String
+    $dateFrom: String
+    $dateTo: String
+    $sortBy: String
+    $sortDir: String
+    $limit: Int
+    $offset: Int
+  ) {
+    materialCatalog(
+      query: $query
+      materialType: $materialType
+      mrpController: $mrpController
+      dateFrom: $dateFrom
+      dateTo: $dateTo
+      sortBy: $sortBy
+      sortDir: $sortDir
+      limit: $limit
+      offset: $offset
+    ) {
+      total
+      rows {
+        material
+        description
+        mrpController
+        materialType
+        totalOrdered
+        totalUnitsProduced
+        avgThroughputMin
+        scrapRatePct
+        totalScrapCost
+      }
+    }
+  }
+`;
+
 export const GET_MATERIAL_SCRAP = gql`
   query GetMaterialScrap($materialId: String!) {
     materialScrap(materialId: $materialId) {

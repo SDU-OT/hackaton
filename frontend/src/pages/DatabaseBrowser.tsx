@@ -29,123 +29,95 @@ export default function DatabaseBrowser() {
   }
 
   return (
-    <>
-      <div className="page-header"><h1>Database Browser</h1></div>
-
-      <div style={{ display: "flex", gap: "1rem", alignItems: "flex-start" }}>
-        {/* Table list */}
-        <div className="card" style={{ minWidth: 220, flexShrink: 0 }}>
-          <h3 style={{ marginBottom: ".8rem", fontSize: ".88rem", color: "var(--text-muted)" }}>Tables</h3>
-          {tablesLoading && <div className="spinner" style={{ fontSize: ".85rem" }}>Loading…</div>}
-          {tables.map((t) => (
-            <button
-              key={t.name}
-              type="button"
-              onClick={() => selectTable(t.name)}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                width: "100%",
-                padding: ".45rem .6rem",
-                marginBottom: ".25rem",
-                borderRadius: 6,
-                border: "1px solid",
-                borderColor: selectedTable === t.name ? "var(--accent)" : "transparent",
-                background: selectedTable === t.name ? "rgba(var(--accent-rgb),.08)" : "transparent",
-                color: selectedTable === t.name ? "var(--accent)" : "var(--text)",
-                cursor: "pointer",
-                fontSize: ".82rem",
-                textAlign: "left",
-                gap: ".5rem",
-              }}
-            >
-              <span style={{ fontFamily: "var(--mono)" }}>{t.name}</span>
-              <span
-                style={{
-                  background: "var(--surface-alt)",
-                  color: "var(--text-muted)",
-                  borderRadius: 999,
-                  padding: ".1rem .45rem",
-                  fontSize: ".75rem",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                {t.rowCount.toLocaleString()}
-              </span>
-            </button>
-          ))}
+    <div className="db-layout">
+      {/* Sidebar */}
+      <aside className="db-sidebar">
+        <div style={{ padding: "20px 16px 8px", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--text-secondary)" }}>
+          Tables
         </div>
-
-        {/* Preview panel */}
-        <div className="card" style={{ flex: 1, minWidth: 0 }}>
-          {!selectedTable && (
-            <div style={{ color: "var(--text-muted)", fontSize: ".9rem", textAlign: "center", padding: "2rem" }}>
-              Select a table on the left to preview its data.
+        {tablesLoading && (
+          <div style={{ padding: "12px 16px", fontSize: 13, color: "var(--text-secondary)" }}>Loading…</div>
+        )}
+        {tables.map((t) => (
+          <div
+            key={t.name}
+            className={`db-table-item${selectedTable === t.name ? " active" : ""}`}
+            onClick={() => selectTable(t.name)}
+          >
+            <div style={{ fontFamily: "Consolas, Menlo, monospace", fontSize: 13 }}>{t.name}</div>
+            <div style={{ fontSize: 11, color: "var(--text-secondary)", marginTop: 2 }}>
+              {t.rowCount.toLocaleString()} rows
             </div>
-          )}
+          </div>
+        ))}
+      </aside>
 
-          {selectedTable && (
-            <>
-              <div style={{ display: "flex", alignItems: "center", gap: "1rem", marginBottom: ".8rem" }}>
-                <h3 style={{ fontFamily: "var(--mono)", margin: 0 }}>{selectedTable}</h3>
-                {preview && (
-                  <span style={{ color: "var(--text-muted)", fontSize: ".82rem" }}>
-                    {preview.total.toLocaleString()} rows · {preview.columns.length} columns
-                  </span>
-                )}
-              </div>
+      {/* Main panel */}
+      <div className="db-main">
+        <h1 style={{ margin: "0 0 24px" }}>Database Browser</h1>
 
-              {previewLoading && <div className="spinner">Loading…</div>}
+        {!selectedTable && (
+          <div className="empty-state">Select a table on the left to preview its data.</div>
+        )}
 
-              {preview && !previewLoading && (
-                <>
-                  <div className="data-table-wrap">
-                    <table className="data-table" style={{ fontSize: ".75rem" }}>
-                      <thead>
-                        <tr>
-                          {preview.columns.map((col) => (
-                            <th key={col} style={{ whiteSpace: "nowrap" }}>{col}</th>
+        {selectedTable && (
+          <>
+            <div style={{ display: "flex", alignItems: "baseline", gap: 16, marginBottom: 20 }}>
+              <h2 style={{ margin: 0, fontFamily: "Consolas, Menlo, monospace", fontSize: 20 }}>
+                {selectedTable}
+              </h2>
+              {preview && (
+                <span style={{ fontSize: 13, color: "var(--text-secondary)" }}>
+                  {preview.total.toLocaleString()} rows · {preview.columns.length} columns
+                </span>
+              )}
+            </div>
+
+            {previewLoading && (
+              <div style={{ color: "var(--text-secondary)", padding: "32px 0" }}>Loading…</div>
+            )}
+
+            {preview && !previewLoading && (
+              <>
+                <div className="data-table-wrap">
+                  <table className="data-table" style={{ fontSize: 13 }}>
+                    <thead>
+                      <tr>
+                        {preview.columns.map((col) => (
+                          <th key={col} style={{ whiteSpace: "nowrap" }}>{col}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {preview.rows.map((row, i) => (
+                        <tr key={i}>
+                          {row.map((cell, j) => (
+                            <td
+                              key={j}
+                              title={cell}
+                              style={{
+                                maxWidth: 200,
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
+                                fontFamily: "Consolas, Menlo, monospace",
+                                fontSize: 12,
+                              }}
+                            >
+                              {cell || <span style={{ color: "var(--text-secondary)" }}>—</span>}
+                            </td>
                           ))}
                         </tr>
-                      </thead>
-                      <tbody>
-                        {preview.rows.map((row, i) => (
-                          <tr key={i}>
-                            {row.map((cell, j) => (
-                              <td
-                                key={j}
-                                title={cell}
-                                style={{
-                                  maxWidth: 200,
-                                  overflow: "hidden",
-                                  textOverflow: "ellipsis",
-                                  whiteSpace: "nowrap",
-                                  fontFamily: "var(--mono)",
-                                }}
-                              >
-                                {cell || <span style={{ color: "var(--text-muted)" }}>—</span>}
-                              </td>
-                            ))}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                  <div style={{ marginTop: ".8rem" }}>
-                    <Pagination
-                      offset={offset}
-                      pageSize={PAGE_SIZE}
-                      total={preview.total}
-                      onPage={setOffset}
-                    />
-                  </div>
-                </>
-              )}
-            </>
-          )}
-        </div>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <Pagination offset={offset} pageSize={PAGE_SIZE} total={preview.total} onPage={setOffset} />
+              </>
+            )}
+          </>
+        )}
       </div>
-    </>
+    </div>
   );
 }

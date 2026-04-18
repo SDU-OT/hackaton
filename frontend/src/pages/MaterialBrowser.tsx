@@ -1,170 +1,281 @@
 import { useState, useCallback } from "react";
 import { useQuery } from "@apollo/client/react";
 import { useNavigate } from "react-router-dom";
-import { GET_MATERIAL_CATALOG_FILTERS, SEARCH_MATERIALS } from "../graphql/queries";
-import type { Material, MaterialCatalogFilters, MaterialSearchResult } from "../graphql/types";
+import { GET_MATERIAL_CATALOG_FILTERS, MATERIAL_CATALOG } from "../graphql/queries";
+import type { MaterialCatalogFilters, MaterialCatalogResult, MaterialCatalogRow } from "../graphql/types";
 import TypeBadge from "../components/TypeBadge";
+import ScrapBadge from "../components/ScrapBadge";
+import Pagination from "../components/Pagination";
 
 const PAGE_SIZE = 50;
 
-const selectStyle = {
-  background: "var(--bg2)",
-  border: "1px solid var(--border)",
-  color: "var(--text-head)",
-  borderRadius: 8,
-  padding: ".56rem .75rem",
-  fontSize: ".85rem",
-  minWidth: 170,
-};
+function fmt(n: number | null | undefined): string {
+  if (n == null) return "—";
+  return n.toLocaleString("en-US");
+}
+
+function fmtCost(n: number | null | undefined): string {
+  if (n == null) return "—";
+  return `€ ${n.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+}
+
+function fmtThroughput(n: number | null | undefined): string {
+  if (n == null) return "—";
+  return `${n.toFixed(1)} min`;
+}
 
 export default function MaterialBrowser() {
   const [search, setSearch] = useState("");
   const [committed, setCommitted] = useState("");
-  const [materialType, setMaterialType] = useState("");
-  const [mrpController, setMrpController] = useState("");
+  const [activeType, setActiveType] = useState("");
+  const [activeMrp, setActiveMrp] = useState("");
+  const [mrpSearch, setMrpSearch] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [offset, setOffset] = useState(0);
+  const [sortCol, setSortCol] = useState("material");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const navigate = useNavigate();
 
-  const { data, loading, error } = useQuery<{ searchMaterials: MaterialSearchResult }>(SEARCH_MATERIALS, {
+  const { data, loading, error } = useQuery<{ materialCatalog: MaterialCatalogResult }>(MATERIAL_CATALOG, {
     variables: {
       query: committed,
+      materialType: activeType,
+      mrpController: activeMrp,
+      dateFrom,
+      dateTo,
+      sortBy: sortCol,
+      sortDir,
       limit: PAGE_SIZE,
       offset,
-      materialType,
-      mrpController,
     },
   });
 
-  const { data: filterData, loading: filtersLoading } = useQuery<{
-    materialCatalogFilters: MaterialCatalogFilters;
-  }>(GET_MATERIAL_CATALOG_FILTERS);
+  const { data: filterData } = useQuery<{ materialCatalogFilters: MaterialCatalogFilters }>(
+    GET_MATERIAL_CATALOG_FILTERS
+  );
 
   const typeOptions = filterData?.materialCatalogFilters.materialTypes ?? [];
-  const mrpOptions = filterData?.materialCatalogFilters.mrpControllers ?? [];
+  const allMrpOptions = filterData?.materialCatalogFilters.mrpControllers ?? [];
+  const mrpOptions = mrpSearch
+    ? allMrpOptions.filter(m => m.toLowerCase().includes(mrpSearch.toLowerCase()))
+    : allMrpOptions;
 
-  const handleSearch = useCallback(() => {
+  const rows: MaterialCatalogRow[] = data?.materialCatalog.rows ?? [];
+  const total: number = data?.materialCatalog.total ?? 0;
+
+  const handleSearch = useCallback((e: React.SyntheticEvent) => {
+    e.preventDefault();
     setOffset(0);
     setCommitted(search.trim());
   }, [search]);
 
+  const selectType = useCallback((t: string) => {
+    setActiveType(prev => prev === t ? "" : t);
+    setOffset(0);
+  }, []);
+
+  const selectMrp = useCallback((m: string) => {
+    setActiveMrp(prev => prev === m ? "" : m);
+    setOffset(0);
+  }, []);
+
+  const handleSort = useCallback((col: string) => {
+    if (col === sortCol) {
+      setSortDir(d => d === "asc" ? "desc" : "asc");
+    } else {
+      setSortCol(col);
+      setSortDir("asc");
+    }
+    setOffset(0);
+  }, [sortCol]);
+
   const clearFilters = useCallback(() => {
     setSearch("");
     setCommitted("");
-    setMaterialType("");
-    setMrpController("");
+    setActiveType("");
+    setActiveMrp("");
+    setMrpSearch("");
+    setDateFrom("");
+    setDateTo("");
     setOffset(0);
   }, []);
 
-  const onTypeChange = useCallback((value: string) => {
-    setMaterialType(value);
-    setOffset(0);
-  }, []);
-
-  const onMrpChange = useCallback((value: string) => {
-    setMrpController(value);
-    setOffset(0);
-  }, []);
-
-  const items: Material[] = data?.searchMaterials.items ?? [];
-  const total: number = data?.searchMaterials.total ?? 0;
+  const hasFilters = committed || activeType || activeMrp || dateFrom || dateTo;
 
   return (
-    <>
-      <div className="page-header"><h1>Materials</h1></div>
+    <div className="materials-layout">
+      {/* Sidebar */}
+      <aside className="materials-sidebar">
 
-      <div className="card">
-        <div className="search-bar">
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-            placeholder="Search by material number…"
-          />
-          <button className="btn btn-primary" onClick={handleSearch}>Search</button>
-          <select
-            value={materialType}
-            onChange={(e) => onTypeChange(e.target.value)}
-            style={selectStyle}
-            title="Filter by material type"
-          >
-            <option value="">All Types</option>
-            {typeOptions.map((type) => (
-              <option key={type} value={type}>{type}</option>
-            ))}
-          </select>
-          <select
-            value={mrpController}
-            onChange={(e) => onMrpChange(e.target.value)}
-            style={selectStyle}
-            title="Filter by MRP controller"
-          >
-            <option value="">All MRP</option>
-            {mrpOptions.map((mrp) => (
-              <option key={mrp} value={mrp}>{mrp}</option>
-            ))}
-          </select>
-          <button className="btn btn-ghost" onClick={clearFilters}>Reset</button>
+        <div>
+          <h3>Date Range</h3>
+          <div className="filter-date-group">
+            <div>
+              <div className="filter-date-label">From</div>
+              <input
+                type="date"
+                value={dateFrom}
+                onChange={e => { setDateFrom(e.target.value); setOffset(0); }}
+              />
+            </div>
+            <div>
+              <div className="filter-date-label">To</div>
+              <input
+                type="date"
+                value={dateTo}
+                onChange={e => { setDateTo(e.target.value); setOffset(0); }}
+              />
+            </div>
+          </div>
         </div>
-        {filtersLoading && (
-          <div style={{ marginTop: ".6rem", color: "var(--text-muted)", fontSize: ".78rem" }}>
-            Loading filter options...
+
+        <div>
+          <h3>Filter by Type</h3>
+          <div className="type-chips">
+            {typeOptions.map(t => (
+              <button
+                key={t}
+                className={`type-chip badge-${t}${activeType === t ? " active" : ""}`}
+                onClick={() => selectType(t)}
+              >
+                {t}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <h3>Filter by MRP</h3>
+          <input
+            type="text"
+            placeholder="Search MRP…"
+            value={mrpSearch}
+            onChange={e => setMrpSearch(e.target.value)}
+            style={{ marginBottom: 8, fontSize: 13, padding: "6px 10px" }}
+          />
+          <div className="filter-group" style={{ maxHeight: 220, overflowY: "auto" }}>
+            {mrpOptions.map(m => (
+              <label key={m} className="filter-checkbox">
+                <input
+                  type="checkbox"
+                  checked={activeMrp === m}
+                  onChange={() => selectMrp(m)}
+                />
+                {m}
+              </label>
+            ))}
+          </div>
+        </div>
+
+        {hasFilters && (
+          <button className="btn btn-secondary" onClick={clearFilters} style={{ marginTop: "auto" }}>
+            Clear Filters
+          </button>
+        )}
+      </aside>
+
+      {/* Main content */}
+      <div className="materials-main">
+        <h1 style={{ margin: "0 0 24px" }}>Materials</h1>
+
+        <form onSubmit={handleSearch}>
+          <div className="search-wrap">
+            <span className="search-icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+              </svg>
+            </span>
+            <input
+              className="search-input"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Search by material ID or description…"
+            />
+          </div>
+        </form>
+
+        {/* Active filter pills */}
+        {(activeType || activeMrp) && (
+          <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
+            {activeType && (
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "var(--bg-section)", border: "1px solid var(--red)", padding: "2px 10px", fontSize: 13 }}>
+                Type: <strong>{activeType}</strong>
+                <button onClick={() => setActiveType("")} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--red)", padding: 0, fontSize: 14, lineHeight: 1 }}>×</button>
+              </span>
+            )}
+            {activeMrp && (
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "var(--bg-section)", border: "1px solid var(--red)", padding: "2px 10px", fontSize: 13 }}>
+                MRP: <strong>{activeMrp}</strong>
+                <button onClick={() => setActiveMrp("")} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--red)", padding: 0, fontSize: 14, lineHeight: 1 }}>×</button>
+              </span>
+            )}
           </div>
         )}
-      </div>
 
-      <div className="card">
-        {error && <div className="error-msg">Error: {error.message}</div>}
-        {loading && !data && <div className="spinner">Loading materials...</div>}
-        {!loading && items.length === 0 && <div className="spinner">No results found.</div>}
+        {error && <div className="empty-state">Error: {error.message}</div>}
+        {loading && !data && <div className="empty-state">Loading materials…</div>}
+        {!loading && !error && rows.length === 0 && (
+          <div className="empty-state">No materials found.</div>
+        )}
 
-        {(items.length > 0 || loading) && (
+        {(rows.length > 0 || loading) && (
           <>
-            <div style={{ marginBottom: ".75rem", color: "var(--text-muted)", fontSize: ".85rem" }}>
-              {total.toLocaleString()} results
+            <div className="materials-meta">
+              {total.toLocaleString()} material{total !== 1 ? "s" : ""}
+              {(dateFrom || dateTo) && (
+                <span style={{ marginLeft: 8, color: "var(--red)" }}>· date filtered</span>
+              )}
             </div>
+
             <div className="data-table-wrap">
               <table className="data-table">
                 <thead>
                   <tr>
-                    <th>Material</th>
-                    <th>Description</th>
-                    <th>Type</th>
+                    {(["material","description","mrp_controller","material_type"] as const).map((col, i) => (
+                      <th key={col} onClick={() => handleSort(col)}
+                          style={{ cursor: "pointer", userSelect: "none", whiteSpace: "nowrap" }}>
+                        {["Material ID","Description","MRP","Type"][i]}
+                        <span style={{ marginLeft: 4, opacity: sortCol === col ? 1 : 0.25, fontSize: 11 }}>
+                          {sortCol === col && sortDir === "desc" ? "▼" : "▲"}
+                        </span>
+                      </th>
+                    ))}
+                    {(["total_ordered","total_units_produced","avg_throughput_min","scrap_rate_pct","total_scrap_cost"] as const).map((col, i) => (
+                      <th key={col} className="num" onClick={() => handleSort(col)}
+                          style={{ cursor: "pointer", userSelect: "none", whiteSpace: "nowrap" }}>
+                        {["Total Orders","Units Produced","Avg Throughput","Scrap Rate","Scrap Cost"][i]}
+                        <span style={{ marginLeft: 4, opacity: sortCol === col ? 1 : 0.25, fontSize: 11 }}>
+                          {sortCol === col && sortDir === "desc" ? "▼" : "▲"}
+                        </span>
+                      </th>
+                    ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {items.map((m) => (
-                    <tr
-                      key={m.material}
-                      className="clickable"
-                      onClick={() => navigate(`/materials/${m.material}`)}
-                    >
-                      <td><code style={{ fontFamily: "var(--mono)", fontSize: ".8rem" }}>{m.material}</code></td>
-                      <td title={m.description ?? ""}>{m.description ?? "—"}</td>
-                      <td><TypeBadge type={m.materialType} /></td>
+                  {rows.map(r => (
+                    <tr key={r.material} onClick={() => navigate(`/materials/${r.material}`)}>
+                      <td className="mono">{r.material}</td>
+                      <td className="trunc" title={r.description ?? ""}>{r.description ?? "—"}</td>
+                      <td>{r.mrpController ?? "—"}</td>
+                      <td><TypeBadge type={r.materialType} /></td>
+                      <td className="num">{fmt(r.totalOrdered)}</td>
+                      <td className="num">{fmt(r.totalUnitsProduced)}</td>
+                      <td className="num">{fmtThroughput(r.avgThroughputMin)}</td>
+                      <td className="num">
+                        {r.scrapRatePct != null ? <ScrapBadge pct={r.scrapRatePct} /> : "—"}
+                      </td>
+                      <td className="num">{fmtCost(r.totalScrapCost)}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
 
-            <div className="pagination" style={{ marginTop: "1rem" }}>
-              <button
-                className="btn btn-ghost"
-                disabled={offset === 0}
-                onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}
-              >← Prev</button>
-              <span>
-                {offset + 1}–{Math.min(offset + PAGE_SIZE, total)} of {total.toLocaleString()}
-              </span>
-              <button
-                className="btn btn-ghost"
-                disabled={offset + PAGE_SIZE >= total}
-                onClick={() => setOffset(offset + PAGE_SIZE)}
-              >Next →</button>
-            </div>
+            <Pagination offset={offset} pageSize={PAGE_SIZE} total={total} onPage={setOffset} />
           </>
         )}
       </div>
-    </>
+    </div>
   );
 }

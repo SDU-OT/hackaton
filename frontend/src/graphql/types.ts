@@ -177,6 +177,23 @@ export interface ImportedDataset {
   importedAt: string;
 }
 
+export interface MaterialCatalogRow {
+  material: string;
+  description?: string | null;
+  mrpController?: string | null;
+  materialType?: string | null;
+  totalOrdered?: number | null;
+  totalUnitsProduced?: number | null;
+  avgThroughputMin?: number | null;
+  scrapRatePct?: number | null;
+  totalScrapCost?: number | null;
+}
+
+export interface MaterialCatalogResult {
+  rows: MaterialCatalogRow[];
+  total: number;
+}
+
 export interface ImportResult {
   name: string;
   tableName: string;

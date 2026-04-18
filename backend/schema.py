@@ -8,6 +8,28 @@ from resolvers import planner as plan_res
 from resolvers import scrap as scrap_res
 from resolvers import dashboard as dash_res
 from resolvers import data_manager as dm_res
+from resolvers import material_catalog as mc_res
+
+
+# ── Material catalog types ────────────────────────────────────────────────────
+
+@strawberry.type
+class MaterialCatalogRow:
+    material: str
+    description: Optional[str]
+    mrp_controller: Optional[str]
+    material_type: Optional[str]
+    total_ordered: Optional[int]
+    total_units_produced: Optional[int]
+    avg_throughput_min: Optional[float]
+    scrap_rate_pct: Optional[float]
+    total_scrap_cost: Optional[float]
+
+
+@strawberry.type
+class MaterialCatalogResult:
+    rows: List[MaterialCatalogRow]
+    total: int
 
 
 # ── Core material types ───────────────────────────────────────────────────────
@@ -324,6 +346,26 @@ class Query:
             total_labor_min=p["total_labor_min"],
             max_depth_reached=p["max_depth_reached"],
         )
+
+    @strawberry.field
+    def material_catalog(
+        self,
+        query: str = "",
+        material_type: str = "",
+        mrp_controller: str = "",
+        date_from: str = "",
+        date_to: str = "",
+        sort_by: str = "material",
+        sort_dir: str = "asc",
+        limit: int = 50,
+        offset: int = 0,
+    ) -> MaterialCatalogResult:
+        result = mc_res.get_material_catalog(
+            query, material_type, mrp_controller, date_from, date_to,
+            sort_by, sort_dir, limit, offset
+        )
+        rows = [MaterialCatalogRow(**r) for r in result["rows"]]
+        return MaterialCatalogResult(rows=rows, total=result["total"])
 
     @strawberry.field
     def scrap_stats(self, limit: int = 100, offset: int = 0) -> List[ScrapStat]:

@@ -3,9 +3,19 @@ import threading
 import duckdb
 import pandas as pd
 
+def _is_lfs_pointer(path: str) -> bool:
+    try:
+        with open(path, "rb") as f:
+            return f.read(50).startswith(b"version https://git-lfs.github.com")
+    except OSError:
+        return False
+
+
 _BASE = os.path.dirname(__file__)
 CSV_DIR = os.path.join(_BASE, "..")
-BOM_CSV  = os.path.join(CSV_DIR, "Bill_of_material_SRP100_1201.csv")
+_BOM_PRIMARY = os.path.join(CSV_DIR, "Bill_of_material_SRP100_1201.csv")
+_BOM_CLEAN   = os.path.join(CSV_DIR, "Bill_of_Material_clean.csv")
+BOM_CSV = _BOM_CLEAN if _is_lfs_pointer(_BOM_PRIMARY) else _BOM_PRIMARY
 MM_CSV   = os.path.join(CSV_DIR, "Material_Master_SRP100_1201.csv")
 ROU_CSV  = os.path.join(CSV_DIR, "Routing_SRP100_1201.csv")
 SCRAP_XL = os.path.join(CSV_DIR, "Scrap.xlsx")

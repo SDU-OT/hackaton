@@ -45,27 +45,13 @@ const PRESET_MAPPINGS: Record<string, Record<string, string>> = {
 };
 
 interface ImportDatasetMutationData {
-  importDataset: {
-    name: string;
-    tableName: string;
-    rowCount: number;
-  };
+  importDataset: { name: string; tableName: string; rowCount: number };
 }
-
 interface ImportDatasetMutationVars {
-  name: string;
-  csvContent: string;
-  targetTable: string;
-  columnMapping: string;
+  name: string; csvContent: string; targetTable: string; columnMapping: string;
 }
-
-interface RemoveDatasetMutationData {
-  removeDataset: boolean;
-}
-
-interface RemoveDatasetMutationVars {
-  name: string;
-}
+interface RemoveDatasetMutationData { removeDataset: boolean }
+interface RemoveDatasetMutationVars { name: string }
 
 export default function DataManagement() {
   const [importName, setImportName]       = useState("");
@@ -80,12 +66,10 @@ export default function DataManagement() {
   const { data: datasetsData, loading: datasetsLoading, refetch: refetchDatasets } =
     useQuery<{ importedDatasets: ImportedDataset[] }>(GET_IMPORTED_DATASETS);
 
-  const { data: tablesData } =
-    useQuery<{ dbTables: DbTable[] }>(GET_DB_TABLES);
+  const { data: tablesData } = useQuery<{ dbTables: DbTable[] }>(GET_DB_TABLES);
 
   const [importDataset, { loading: importing }] = useMutation<
-    ImportDatasetMutationData,
-    ImportDatasetMutationVars
+    ImportDatasetMutationData, ImportDatasetMutationVars
   >(IMPORT_DATASET, {
     onCompleted: (d) => {
       setImportSuccess(
@@ -98,20 +82,13 @@ export default function DataManagement() {
       if (fileRef.current) fileRef.current.value = "";
       refetchDatasets();
     },
-    onError: (e) => {
-      setImportError(e.message);
-      setImportSuccess(null);
-    },
+    onError: (e) => { setImportError(e.message); setImportSuccess(null); },
   });
 
   const [removeDataset, { loading: removingMutation }] = useMutation<
-    RemoveDatasetMutationData,
-    RemoveDatasetMutationVars
+    RemoveDatasetMutationData, RemoveDatasetMutationVars
   >(REMOVE_DATASET, {
-    onCompleted: () => {
-      setRemoving(null);
-      refetchDatasets();
-    },
+    onCompleted: () => { setRemoving(null); refetchDatasets(); },
   });
 
   const datasets = datasetsData?.importedDatasets ?? [];
@@ -131,12 +108,7 @@ export default function DataManagement() {
     if (!csvContent || !importName) return;
     const mapping = PRESET_MAPPINGS[targetTable] ?? {};
     importDataset({
-      variables: {
-        name:          importName,
-        csvContent,
-        targetTable,
-        columnMapping: JSON.stringify(mapping),
-      },
+      variables: { name: importName, csvContent, targetTable, columnMapping: JSON.stringify(mapping) },
     });
   }
 
@@ -146,19 +118,19 @@ export default function DataManagement() {
   }
 
   return (
-    <>
-      <div className="page-header"><h1>Data Management</h1></div>
+    <div className="page-inner">
+      <h1>Data Upload</h1>
 
       {/* Import form */}
-      <div className="card">
-        <h3 style={{ marginBottom: "1rem" }}>Import CSV Dataset</h3>
-        <div style={{ display: "grid", gap: ".8rem", maxWidth: 540 }}>
+      <div className="card" style={{ marginBottom: 24, maxWidth: 640 }}>
+        <h2 style={{ margin: "0 0 20px", fontSize: 18 }}>Import CSV Dataset</h2>
+        <div style={{ display: "grid", gap: 16 }}>
           <div>
-            <label style={{ display: "block", fontSize: ".82rem", color: "var(--text-muted)", marginBottom: ".3rem" }}>
+            <label style={{ display: "block", fontSize: 12, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--text-secondary)", marginBottom: 6 }}>
               Dataset name
             </label>
             <input
-              className="input"
+              type="text"
               style={{ width: "100%" }}
               value={importName}
               onChange={(e) => setImportName(e.target.value)}
@@ -167,21 +139,10 @@ export default function DataManagement() {
           </div>
 
           <div>
-            <label style={{ display: "block", fontSize: ".82rem", color: "var(--text-muted)", marginBottom: ".3rem" }}>
+            <label style={{ display: "block", fontSize: 12, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--text-secondary)", marginBottom: 6 }}>
               Target table
             </label>
-            <select
-              value={targetTable}
-              onChange={(e) => setTargetTable(e.target.value)}
-              style={{
-                background: "var(--surface-alt)",
-                color: "var(--text)",
-                border: "1px solid var(--border)",
-                borderRadius: 6,
-                padding: ".45rem .6rem",
-                width: "100%",
-              }}
-            >
+            <select value={targetTable} onChange={(e) => setTargetTable(e.target.value)} style={{ width: "100%" }}>
               {TARGET_TABLES.map((t) => (
                 <option key={t.value} value={t.value}>{t.label}</option>
               ))}
@@ -189,7 +150,7 @@ export default function DataManagement() {
           </div>
 
           <div>
-            <label style={{ display: "block", fontSize: ".82rem", color: "var(--text-muted)", marginBottom: ".3rem" }}>
+            <label style={{ display: "block", fontSize: 12, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--text-secondary)", marginBottom: 6 }}>
               CSV file
             </label>
             <input
@@ -197,41 +158,41 @@ export default function DataManagement() {
               type="file"
               accept=".csv,text/csv"
               onChange={handleFile}
-              style={{ fontSize: ".85rem", color: "var(--text)" }}
+              style={{ fontSize: 14, color: "var(--text-body)", padding: "8px 0" }}
             />
             {fileName && (
-              <div style={{ marginTop: ".3rem", fontSize: ".78rem", color: "var(--text-muted)" }}>
+              <div style={{ marginTop: 4, fontSize: 12, color: "var(--text-secondary)" }}>
                 {fileName} loaded
               </div>
             )}
           </div>
 
-          <div style={{ fontSize: ".78rem", color: "var(--text-muted)", background: "var(--surface-alt)", padding: ".6rem .8rem", borderRadius: 6 }}>
-            Column mapping applied automatically for <strong>Production Orders</strong> and <strong>Scrap Records</strong> presets.
-            Export your xlsx to CSV first, then import here.
+          <div style={{ fontSize: 13, color: "var(--text-secondary)", background: "var(--bg-section)", padding: "10px 14px", borderLeft: "3px solid var(--border)" }}>
+            Column mapping is applied automatically for <strong>Production Orders</strong> and <strong>Scrap Records</strong> presets. Export your .xlsx to CSV first, then import here.
           </div>
 
-          {importError   && <div style={{ color: "var(--red)", fontSize: ".85rem" }}>{importError}</div>}
-          {importSuccess && <div style={{ color: "var(--green, #4ade80)", fontSize: ".85rem" }}>{importSuccess}</div>}
+          {importError   && <div style={{ color: "var(--red)", fontSize: 14 }}>{importError}</div>}
+          {importSuccess && <div style={{ color: "var(--status-green)", fontSize: 14 }}>{importSuccess}</div>}
 
-          <button
-            className="btn btn-primary"
-            style={{ alignSelf: "flex-start" }}
-            onClick={doImport}
-            disabled={importing || !csvContent || !importName}
-          >
-            {importing ? "Importing…" : "Import"}
-          </button>
+          <div>
+            <button
+              className="btn"
+              onClick={doImport}
+              disabled={importing || !csvContent || !importName}
+            >
+              {importing ? "Importing…" : "Import"}
+            </button>
+          </div>
         </div>
       </div>
 
       {/* Imported datasets */}
-      <div className="card" style={{ marginTop: "1rem" }}>
-        <h3 style={{ marginBottom: ".8rem" }}>Imported Datasets</h3>
-        {datasetsLoading && <div className="spinner">Loading…</div>}
+      <div className="card" style={{ marginBottom: 24 }}>
+        <h2 style={{ margin: "0 0 20px", fontSize: 18 }}>Imported Datasets</h2>
+        {datasetsLoading && <div style={{ color: "var(--text-secondary)" }}>Loading…</div>}
         {!datasetsLoading && datasets.length === 0 && (
-          <div style={{ color: "var(--text-muted)", fontSize: ".88rem" }}>
-            No datasets imported yet. Auto-import (DEV_AUTO_IMPORT=1) loads Scrap.xlsx automatically in dev mode.
+          <div style={{ color: "var(--text-secondary)", fontSize: 14 }}>
+            No datasets imported yet.
           </div>
         )}
         {datasets.length > 0 && (
@@ -242,7 +203,7 @@ export default function DataManagement() {
                   <th>Name</th>
                   <th>Source file</th>
                   <th>Target table</th>
-                  <th>Rows</th>
+                  <th className="num">Rows</th>
                   <th>Imported at</th>
                   <th></th>
                 </tr>
@@ -250,15 +211,15 @@ export default function DataManagement() {
               <tbody>
                 {datasets.map((ds) => (
                   <tr key={ds.name}>
-                    <td style={{ fontFamily: "var(--mono)" }}>{ds.name}</td>
-                    <td style={{ fontSize: ".8rem" }}>{ds.sourceFile}</td>
-                    <td style={{ fontFamily: "var(--mono)", fontSize: ".8rem" }}>{ds.tableName}</td>
-                    <td>{ds.rowCount.toLocaleString()}</td>
-                    <td style={{ fontSize: ".78rem", color: "var(--text-muted)" }}>{ds.importedAt}</td>
+                    <td className="mono">{ds.name}</td>
+                    <td style={{ fontSize: 13 }}>{ds.sourceFile}</td>
+                    <td className="mono" style={{ fontSize: 13 }}>{ds.tableName}</td>
+                    <td className="num">{ds.rowCount.toLocaleString()}</td>
+                    <td style={{ fontSize: 12, color: "var(--text-secondary)" }}>{ds.importedAt}</td>
                     <td>
                       <button
-                        className="btn btn-ghost"
-                        style={{ fontSize: ".78rem", color: "var(--red)", borderColor: "var(--red)" }}
+                        className="btn btn-secondary"
+                        style={{ fontSize: 12, padding: "4px 12px", color: "var(--red)", borderColor: "var(--red)" }}
                         onClick={() => doRemove(ds.name)}
                         disabled={removingMutation && removing === ds.name}
                       >
@@ -274,28 +235,29 @@ export default function DataManagement() {
       </div>
 
       {/* DB table overview */}
-      <div className="card" style={{ marginTop: "1rem" }}>
-        <h3 style={{ marginBottom: ".8rem" }}>All Database Tables</h3>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: ".5rem" }}>
-          {tables.map((t) => (
-            <div
-              key={t.name}
-              style={{
-                background: "var(--surface-alt)",
-                border: "1px solid var(--border)",
-                borderRadius: 6,
-                padding: ".4rem .7rem",
-                fontSize: ".8rem",
-              }}
-            >
-              <span style={{ fontFamily: "var(--mono)", color: "var(--text)" }}>{t.name}</span>
-              <span style={{ color: "var(--text-muted)", marginLeft: ".4rem" }}>
-                {t.rowCount.toLocaleString()} rows
-              </span>
-            </div>
-          ))}
+      {tables.length > 0 && (
+        <div className="card">
+          <h2 style={{ margin: "0 0 16px", fontSize: 18 }}>Database Tables</h2>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+            {tables.map((t) => (
+              <div
+                key={t.name}
+                style={{
+                  background: "var(--bg-section)",
+                  border: "1px solid var(--border)",
+                  padding: "6px 12px",
+                  fontSize: 13,
+                }}
+              >
+                <span style={{ fontFamily: "Consolas, Menlo, monospace", color: "var(--text-body)" }}>{t.name}</span>
+                <span style={{ color: "var(--text-secondary)", marginLeft: 8 }}>
+                  {t.rowCount.toLocaleString()} rows
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
-      </div>
-    </>
+      )}
+    </div>
   );
 }
