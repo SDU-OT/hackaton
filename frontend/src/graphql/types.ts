@@ -33,6 +33,7 @@ export interface BomExplosionItem {
   component: string;
   description?: string | null;
   materialType?: string | null;
+  materialGroup?: string | null;
   mrpController?: string | null;
   unit: string;
   qtyPerParent: number;
@@ -116,6 +117,8 @@ export interface ScrapStat {
   totalScrap: number;
   totalDelivered: number;
   scrapRatePct: number;
+  avgStdPrice?: number | null;
+  totalScrapCost?: number | null;
 }
 
 export interface TypeDistribution {
@@ -145,4 +148,60 @@ export interface DashboardStats {
   typeDistribution: TypeDistribution[];
   topComplexMaterials: TopMaterial[];
   topScrapMaterials: TopScrapMaterial[];
+}
+
+export interface ScrapChainItem {
+  component: string;
+  description?: string | null;
+  depth: number;
+  pathStr: string;
+  qtyPerScrappedUnit: number;
+  totalQtyWasted: number;
+  machineMinWasted: number;
+  laborMinWasted: number;
+  estimatedCost?: number | null;
+}
+
+export interface SankeyNode {
+  id: string;
+  label: string;
+  value: number;
+}
+
+export interface SankeyLink {
+  source: string;
+  target: string;
+  value: number;
+}
+
+export interface ScrapSankeyData {
+  nodes: SankeyNode[];
+  links: SankeyLink[];
+}
+
+export interface DbTable {
+  name: string;
+  rowCount: number;
+  columns: string[];
+}
+
+export interface TablePreview {
+  tableName: string;
+  columns: string[];
+  rows: string[][];
+  total: number;
+}
+
+export interface ImportedDataset {
+  name: string;
+  sourceFile: string;
+  tableName: string;
+  rowCount: number;
+  importedAt: string;
+}
+
+export interface ImportResult {
+  name: string;
+  tableName: string;
+  rowCount: number;
 }

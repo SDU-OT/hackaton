@@ -2,14 +2,16 @@ from db import query
 
 
 def get_routing(material_id: str):
+    mid = (material_id or "").strip()
     rows = query("""
         SELECT
             material, sequence, description, wc_id, work_center, crtl_key,
             machine_min, labor_min, setup_min, machine_unit, labor_unit, setup_unit
         FROM routing
         WHERE material = ?
+           OR LTRIM(material, '0') = LTRIM(?, '0')
         ORDER BY sequence
-    """, [material_id])
+    """, [mid, mid])
     return [_row_to_op(r) for r in rows]
 
 

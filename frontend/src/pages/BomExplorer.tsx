@@ -16,8 +16,8 @@ import ReactFlow, {
   type EdgeProps,
 } from "reactflow";
 import "reactflow/dist/style.css";
-import { GET_BOM_EXPLOSION, GET_MATERIAL } from "../graphql/queries";
-import type { BomExplosionItem } from "../graphql/types";
+import { GET_BOM_EXPLOSION, GET_MATERIAL, GET_SCRAP_CHAIN } from "../graphql/queries";
+import type { BomExplosionItem, ScrapChainItem } from "../graphql/types";
 import TypeBadge from "../components/TypeBadge";
 
 const NODE_W = 200;
@@ -30,6 +30,12 @@ const LEVEL_ROW_GAP = 44;
 const LEVEL_NODE_GAP = 24;
 const ROOT_TO_LEVEL_GAP = 90;
 const MAX_NODES = 600;
+
+function formatMin(min: number | null | undefined) {
+  if (!min || min === 0) return "—";
+  if (min < 60) return `${min.toFixed(1)} min`;
+  return `${(min / 60).toFixed(2)} h`;
+}
 
 function getMrpLabel(value: unknown) {
   const s = String(value ?? "").trim();
@@ -66,16 +72,19 @@ function BomNodeComponent({ data }: { data: Record<string, unknown> }) {
         boxShadow: `0 0 0 1px ${mrpColor}33, inset 4px 0 0 ${mrpColor}`,
       }
     : undefined;
+  const selected = Boolean(data.selected);
 
   return (
     <div
-      className={`bom-node${data.isRoot ? " root" : ""}`}
+      className={`bom-node${data.isRoot ? " root" : ""}${selected ? " selected" : ""}`}
       style={{
         fontSize: ".72rem",
         ...colorStyle,
         opacity: dimmed ? 0.28 : 1,
         filter: dimmed ? "saturate(0.22)" : "none",
         transition: "opacity .15s ease, filter .15s ease",
+        outline: selected ? "2px solid var(--accent)" : undefined,
+        outlineOffset: selected ? 2 : undefined,
       }}
     >
       <Handle type="target" position={Position.Top} className="bom-handle" />
@@ -85,7 +94,7 @@ function BomNodeComponent({ data }: { data: Record<string, unknown> }) {
       </div>
       {requiredQty > 0 && (
         <div className="node-qty" title="Total required quantity for this BOM explosion">
-          Quantity : {requiredText}
+          Quantity : {requiredText} {requiredUnit}
         </div>
       )}
       {!!data.materialType && (
@@ -131,25 +140,13 @@ function MrpGroupNodeComponent({ data }: { data: Record<string, unknown> }) {
 }
 
 function BomEdge({
-  id,
-  sourceX,
-  sourceY,
-  targetX,
-  targetY,
-  sourcePosition,
-  targetPosition,
-  markerEnd,
-  style,
-  label,
+  id, sourceX, sourceY, targetX, targetY,
+  sourcePosition, targetPosition, markerEnd, style, label,
 }: EdgeProps) {
   const edgeLabel = String(label ?? "").trim();
   const [edgePath, labelX, labelY] = getBezierPath({
-    sourceX,
-    sourceY,
-    targetX,
-    targetY,
-    sourcePosition,
-    targetPosition,
+    sourceX, sourceY, targetX, targetY,
+    sourcePosition, targetPosition,
     curvature: 0.35,
   });
 
@@ -160,9 +157,7 @@ function BomEdge({
         <EdgeLabelRenderer>
           <div
             className="bom-edge-label"
-            style={{
-              transform: `translate(-50%, -130%) translate(${labelX}px,${labelY}px)`,
-            }}
+            style={{ transform: `translate(-50%, -130%) translate(${labelX}px,${labelY}px)` }}
           >
             {edgeLabel}
           </div>
@@ -175,6 +170,175 @@ function BomEdge({
 const nodeTypes = { bomNode: BomNodeComponent, mrpGroup: MrpGroupNodeComponent };
 const edgeTypes = { bomEdge: BomEdge };
 
+interface SelectedNodeData {
+  id: string;
+  description: string | null;
+  materialType: string | null;
+  mrpController: string | null;
+  requiredQty: number;
+  requiredUnit: string;
+  totalMachineMin: number;
+  totalLaborMin: number;
+  qtyPerParent?: number;
+}
+
+function NodeDetailPanel({
+  node,
+  items,
+  onClose,
+  onNavigate,
+  onViewScrap,
+}: {
+  node: SelectedNodeData;
+  items: BomExplosionItem[];
+  onClose: () => void;
+  onNavigate: () => void;
+  onViewScrap: () => void;
+}) {
+  // Find this node in the explosion to get per-unit times
+  const itemData = items.find((i) => i.component === node.id);
+  const perUnitMachine = itemData && itemData.totalQuantity > 0
+    ? itemData.totalMachineMin / itemData.totalQuantity
+    : 0;
+  const perUnitLabor = itemData && itemData.totalQuantity > 0
+    ? itemData.totalLaborMin / itemData.totalQuantity
+    : 0;
+
+  return (
+    <div
+      style={{
+        position: "absolute",
+        top: 12,
+        right: 12,
+        width: 280,
+        zIndex: 100,
+        background: "var(--surface)",
+        border: "1px solid var(--border)",
+        borderRadius: 10,
+        padding: "1rem",
+        boxShadow: "0 8px 32px rgba(0,0,0,.4)",
+        fontSize: ".82rem",
+      }}
+    >
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: ".7rem" }}>
+        <div>
+          <div style={{ fontFamily: "var(--mono)", fontWeight: 700, fontSize: ".9rem" }}>{node.id}</div>
+          <div style={{ color: "var(--text-muted)", marginTop: ".2rem" }}>{node.description ?? "—"}</div>
+        </div>
+        <button
+          onClick={onClose}
+          style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: "1.1rem", lineHeight: 1 }}
+        >
+          ×
+        </button>
+      </div>
+
+      {node.materialType && (
+        <div style={{ marginBottom: ".6rem" }}><TypeBadge type={node.materialType} /></div>
+      )}
+
+      <div style={{ display: "grid", gap: ".4rem", marginBottom: ".8rem" }}>
+        <Row label="MRP Controller" value={node.mrpController ?? "—"} />
+        <Row label="Total qty (this explosion)" value={`${node.requiredQty.toFixed(node.requiredQty % 1 === 0 ? 0 : 4)} ${node.requiredUnit}`} />
+      </div>
+
+      <div style={{ borderTop: "1px solid var(--border)", paddingTop: ".6rem", marginBottom: ".8rem" }}>
+        <div style={{ color: "var(--text-muted)", fontSize: ".75rem", marginBottom: ".4rem", textTransform: "uppercase", letterSpacing: ".04em" }}>
+          Routing time
+        </div>
+        <div style={{ display: "grid", gap: ".3rem" }}>
+          <Row label="Machine / unit" value={formatMin(perUnitMachine)} accent />
+          <Row label="Machine × qty" value={formatMin(node.totalMachineMin)} accent />
+          <Row label="Labor / unit" value={formatMin(perUnitLabor)} />
+          <Row label="Labor × qty" value={formatMin(node.totalLaborMin)} />
+          <Row
+            label="Total (machine + labor)"
+            value={formatMin(node.totalMachineMin + node.totalLaborMin)}
+            strong
+          />
+        </div>
+      </div>
+
+      <div style={{ display: "flex", gap: ".5rem", flexWrap: "wrap" }}>
+        <button className="btn btn-ghost" style={{ fontSize: ".78rem" }} onClick={onNavigate}>
+          Material detail →
+        </button>
+        <button className="btn btn-ghost" style={{ fontSize: ".78rem" }} onClick={onViewScrap}>
+          Scrap chain →
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function Row({ label, value, accent, strong }: { label: string; value: string; accent?: boolean; strong?: boolean }) {
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", gap: ".5rem" }}>
+      <span style={{ color: "var(--text-muted)" }}>{label}</span>
+      <span style={{ fontFamily: "var(--mono)", fontWeight: strong ? 700 : undefined, color: accent ? "var(--accent)" : "var(--text)" }}>
+        {value}
+      </span>
+    </div>
+  );
+}
+
+function ScrapChainPanel({
+  materialId,
+  onClose,
+}: {
+  materialId: string;
+  onClose: () => void;
+}) {
+  const { data, loading } = useQuery<{ scrapChain: ScrapChainItem[] }>(GET_SCRAP_CHAIN, {
+    variables: { materialId },
+  });
+  const chain = data?.scrapChain ?? [];
+
+  return (
+    <div className="card" style={{ marginTop: "1rem" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "1rem", marginBottom: ".8rem" }}>
+        <h3 style={{ margin: 0, fontSize: ".95rem" }}>Scrap chain: {materialId}</h3>
+        <button className="btn btn-ghost" style={{ fontSize: ".78rem" }} onClick={onClose}>Close</button>
+      </div>
+      {loading && <div className="spinner">Loading…</div>}
+      {!loading && chain.length === 0 && (
+        <div style={{ color: "var(--text-muted)", fontSize: ".85rem" }}>
+          No scrap chain data. Either no scrap was recorded for this material, or production orders haven't been imported.
+        </div>
+      )}
+      {chain.length > 0 && (
+        <div className="data-table-wrap">
+          <table className="data-table" style={{ fontSize: ".78rem" }}>
+            <thead>
+              <tr>
+                <th>Depth</th><th>Component</th><th>Description</th>
+                <th>Qty / scrapped unit</th><th>Total qty wasted</th>
+                <th>Machine wasted</th><th>Labor wasted</th><th>Est. cost</th>
+              </tr>
+            </thead>
+            <tbody>
+              {chain.map((item, i) => (
+                <tr key={i}>
+                  <td style={{ fontFamily: "var(--mono)" }}>{item.depth}</td>
+                  <td style={{ fontFamily: "var(--mono)" }}>{item.component}</td>
+                  <td title={item.description ?? ""}>{item.description ?? "—"}</td>
+                  <td>{item.qtyPerScrappedUnit.toFixed(4)}</td>
+                  <td style={{ color: "var(--red)", fontWeight: 600 }}>
+                    {item.totalQtyWasted.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                  </td>
+                  <td>{formatMin(item.machineMinWasted)}</td>
+                  <td>{formatMin(item.laborMinWasted)}</td>
+                  <td>{item.estimatedCost != null ? item.estimatedCost.toFixed(2) : "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function BomExplorer() {
   const { id: paramId } = useParams<{ id?: string }>();
   const navigate = useNavigate();
@@ -183,6 +347,8 @@ export default function BomExplorer() {
   const [depth, setDepth] = useState(5);
   const [viewMode, setViewMode] = useState<"graph" | "table">("graph");
   const [inactiveMrps, setInactiveMrps] = useState<string[]>([]);
+  const [selectedNode, setSelectedNode] = useState<SelectedNodeData | null>(null);
+  const [scrapChainFor, setScrapChainFor] = useState<string | null>(null);
 
   const { data, loading, error } = useQuery<{ bomExplosion: BomExplosionItem[] }>(GET_BOM_EXPLOSION, {
     variables: { materialId: committed, quantity: 1, maxDepth: depth },
@@ -213,6 +379,8 @@ export default function BomExplorer() {
     setSearchId(next);
     setCommitted(next);
     setInactiveMrps([]);
+    setSelectedNode(null);
+    setScrapChainFor(null);
   }, [paramId]);
 
   const { nodes, edges, tooLarge, mrpLegend } = useMemo(() => {
@@ -235,6 +403,7 @@ export default function BomExplorer() {
         requiredUnit: "PC",
         totalMachineMin: 0,
         totalLaborMin: 0,
+        selected: selectedNode?.id === effectiveRootId,
       },
       position: { x: 0, y: 0 },
       zIndex: 2,
@@ -268,28 +437,30 @@ export default function BomExplorer() {
             requiredUnit:    item.unit,
             totalMachineMin: item.totalMachineMin,
             totalLaborMin:   item.totalLaborMin,
+            selected:        selectedNode?.id === item.component,
           },
           position: { x: 0, y: 0 },
           zIndex: 2,
         });
       } else {
         const currentData = existingNode.data as Record<string, unknown>;
-        const prevQty = Number(currentData.requiredQty ?? 0);
+        const prevQty  = Number(currentData.requiredQty ?? 0);
         const prevUnit = String(currentData.requiredUnit ?? "").trim();
         const nextUnitRaw = String(item.unit ?? "").trim();
-        const nextUnit = prevUnit && nextUnitRaw && prevUnit !== nextUnitRaw
-          ? "mixed"
-          : (prevUnit || nextUnitRaw);
+        const nextUnit = prevUnit && nextUnitRaw && prevUnit !== nextUnitRaw ? "mixed" : (prevUnit || nextUnitRaw);
         existingNode.data = {
           ...currentData,
-          requiredQty: (Number.isFinite(prevQty) ? prevQty : 0) + item.totalQuantity,
-          requiredUnit: nextUnit,
+          requiredQty:     (Number.isFinite(prevQty) ? prevQty : 0) + item.totalQuantity,
+          requiredUnit:    nextUnit,
+          totalMachineMin: Number(currentData.totalMachineMin ?? 0) + item.totalMachineMin,
+          totalLaborMin:   Number(currentData.totalLaborMin ?? 0)   + item.totalLaborMin,
+          selected:        selectedNode?.id === item.component,
         };
       }
     }
 
     const tooLarge = nodeMap.size > MAX_NODES;
-    const nodeArr = Array.from(nodeMap.values()).slice(0, MAX_NODES);
+    const nodeArr  = Array.from(nodeMap.values()).slice(0, MAX_NODES);
     const rootNode = nodeArr.find((node) => node.data?.isRoot);
     const nonRootNodes = nodeArr.filter((node) => !node.data?.isRoot);
 
@@ -329,15 +500,15 @@ export default function BomExplorer() {
 
       for (const node of groupNodesRaw) {
         const nodeDepth = Number(node.data?.depth ?? 1);
-        const depth = Number.isFinite(nodeDepth) && nodeDepth > 0 ? nodeDepth : 1;
-        if (!depthBuckets.has(depth)) depthBuckets.set(depth, []);
-        depthBuckets.get(depth)!.push(node);
+        const d = Number.isFinite(nodeDepth) && nodeDepth > 0 ? nodeDepth : 1;
+        if (!depthBuckets.has(d)) depthBuckets.set(d, []);
+        depthBuckets.get(d)!.push(node);
       }
 
       const sortedDepths = Array.from(depthBuckets.keys()).sort((a, b) => a - b);
       let maxCols = 1;
-      for (const depth of sortedDepths) {
-        const rowNodes = depthBuckets.get(depth)!;
+      for (const d of sortedDepths) {
+        const rowNodes = depthBuckets.get(d)!;
         rowNodes.sort((a, b) => String(a.data?.label ?? "").localeCompare(String(b.data?.label ?? "")));
         if (rowNodes.length > maxCols) maxCols = rowNodes.length;
       }
@@ -345,9 +516,9 @@ export default function BomExplorer() {
       const groupContentWidth = maxCols * NODE_W + (maxCols - 1) * LEVEL_NODE_GAP;
       const groupLeft = cursorX;
 
-      for (const depth of sortedDepths) {
-        const rowY = levelBaseY + (depth - 1) * (NODE_H + LEVEL_ROW_GAP);
-        const rowNodes = depthBuckets.get(depth)!;
+      for (const d of sortedDepths) {
+        const rowY = levelBaseY + (d - 1) * (NODE_H + LEVEL_ROW_GAP);
+        const rowNodes = depthBuckets.get(d)!;
         for (let col = 0; col < rowNodes.length; col += 1) {
           const node = rowNodes[col];
           node.position = { x: groupLeft + col * (NODE_W + LEVEL_NODE_GAP), y: rowY };
@@ -365,23 +536,13 @@ export default function BomExplorer() {
         type: "mrpGroup",
         position: { x: minX - GROUP_PAD_X, y: minY - GROUP_PAD_TOP },
         data: {
-          label: mrp,
-          count: groupNodesRaw.length,
-          dimmed: isMuted,
-          groupAccent: colors.accent,
-          groupBorderColor: colors.border,
-          groupFill: colors.fill,
-          groupInset: `inset 0 0 0 1px ${colors.inset}`,
+          label: mrp, count: groupNodesRaw.length, dimmed: isMuted,
+          groupAccent: colors.accent, groupBorderColor: colors.border,
+          groupFill: colors.fill, groupInset: `inset 0 0 0 1px ${colors.inset}`,
         },
-        draggable: false,
-        selectable: false,
-        connectable: false,
-        focusable: false,
+        draggable: false, selectable: false, connectable: false, focusable: false,
         zIndex: 0,
-        style: {
-          width: maxX - minX + GROUP_PAD_X * 2,
-          height: maxY - minY + GROUP_PAD_TOP + GROUP_PAD_BOTTOM,
-        },
+        style: { width: maxX - minX + GROUP_PAD_X * 2, height: maxY - minY + GROUP_PAD_TOP + GROUP_PAD_BOTTOM },
       });
 
       cursorX += groupContentWidth + GROUP_PAD_X * 2 + GROUP_COLUMN_GAP;
@@ -395,10 +556,8 @@ export default function BomExplorer() {
       const rootMuted = inactiveMrps.includes(rootMrpLabel);
       rootNode.data = {
         ...rootNode.data,
-        mrpColor: rootColors.accent,
-        dimmed: rootMuted,
-        mrpController: rootMrpLabel,
-        materialType: rootMaterialType,
+        mrpColor: rootColors.accent, dimmed: rootMuted,
+        mrpController: rootMrpLabel, materialType: rootMaterialType,
       };
 
       groupNodes.push({
@@ -406,24 +565,13 @@ export default function BomExplorer() {
         type: "mrpGroup",
         position: { x: rootNode.position.x - GROUP_PAD_X, y: rootNode.position.y - GROUP_PAD_TOP },
         data: {
-          label: rootMrpLabel,
-          count: 1,
-          metaText: "Root material",
-          dimmed: rootMuted,
-          groupAccent: rootColors.accent,
-          groupBorderColor: rootColors.border,
-          groupFill: rootColors.fill,
-          groupInset: `inset 0 0 0 1px ${rootColors.inset}`,
+          label: rootMrpLabel, count: 1, metaText: "Root material", dimmed: rootMuted,
+          groupAccent: rootColors.accent, groupBorderColor: rootColors.border,
+          groupFill: rootColors.fill, groupInset: `inset 0 0 0 1px ${rootColors.inset}`,
         },
-        draggable: false,
-        selectable: false,
-        connectable: false,
-        focusable: false,
+        draggable: false, selectable: false, connectable: false, focusable: false,
         zIndex: 1,
-        style: {
-          width: NODE_W + GROUP_PAD_X * 2,
-          height: NODE_H + GROUP_PAD_TOP + GROUP_PAD_BOTTOM,
-        },
+        style: { width: NODE_W + GROUP_PAD_X * 2, height: NODE_H + GROUP_PAD_TOP + GROUP_PAD_BOTTOM },
       });
     }
 
@@ -440,11 +588,7 @@ export default function BomExplorer() {
       return {
         ...edge,
         animated: !isDimmed && edgeDepth <= 2,
-        style: {
-          stroke: color,
-          strokeWidth: isDimmed ? 1.25 : 1.65,
-          opacity: isDimmed ? 0.24 : 0.9,
-        },
+        style: { stroke: color, strokeWidth: isDimmed ? 1.25 : 1.65, opacity: isDimmed ? 0.24 : 0.9 },
         markerEnd: { type: MarkerType.ArrowClosed, color },
       };
     });
@@ -452,15 +596,14 @@ export default function BomExplorer() {
     const mrpLegend = Array.from(legendCounts.entries())
       .sort((a, b) => a[0].localeCompare(b[0]))
       .map(([label, count]) => ({
-        label,
-        count,
+        label, count,
         color: (colorByLabel.get(label) ?? getColorForGroup(0)).accent,
         chipFill: (colorByLabel.get(label) ?? getColorForGroup(0)).chipFill,
         active: !inactiveMrps.includes(label),
       }));
 
     return { nodes: [...groupNodes, ...nodeArr], edges: styledEdges, tooLarge, mrpLegend };
-  }, [items, committed, rootMrpLabel, rootMaterialType, inactiveMrps]);
+  }, [items, committed, rootMrpLabel, rootMaterialType, inactiveMrps, selectedNode]);
 
   useEffect(() => {
     setInactiveMrps((prev) => {
@@ -477,9 +620,31 @@ export default function BomExplorer() {
   }, []);
 
   const commit = useCallback(() => {
-    setCommitted(searchId.trim());
-    navigate(`/bom/${searchId.trim()}`, { replace: true });
+    const trimmed = searchId.trim();
+    setCommitted(trimmed);
+    setSelectedNode(null);
+    setScrapChainFor(null);
+    navigate(`/bom/${trimmed}`, { replace: true });
   }, [searchId, navigate]);
+
+  const handleNodeClick = useCallback((_: unknown, node: Node) => {
+    if (node.type !== "bomNode") return;
+    const d = node.data as Record<string, unknown>;
+    if (selectedNode?.id === node.id) {
+      setSelectedNode(null);
+      return;
+    }
+    setSelectedNode({
+      id:              node.id,
+      description:     d.description as string | null ?? null,
+      materialType:    d.materialType as string | null ?? null,
+      mrpController:   d.mrpController as string | null ?? null,
+      requiredQty:     Number(d.requiredQty ?? 0),
+      requiredUnit:    String(d.requiredUnit ?? ""),
+      totalMachineMin: Number(d.totalMachineMin ?? 0),
+      totalLaborMin:   Number(d.totalLaborMin ?? 0),
+    });
+  }, [selectedNode]);
 
   return (
     <>
@@ -504,7 +669,7 @@ export default function BomExplorer() {
             <span style={{ fontWeight: 700, color: "var(--accent)" }}>{depth}</span>
           </div>
           <button
-            className={`btn btn-ghost`}
+            className="btn btn-ghost"
             onClick={() => setViewMode(viewMode === "graph" ? "table" : "graph")}
           >
             {viewMode === "graph" ? "Table View" : "Graph View"}
@@ -513,11 +678,16 @@ export default function BomExplorer() {
         {committed && (
           <div style={{ marginTop: ".65rem", fontSize: ".82rem", color: "var(--text-muted)", display: "flex", gap: "1.2rem", flexWrap: "wrap" }}>
             <span>
-              Queried material description: <strong style={{ color: "var(--text)" }}>{rootMaterialDescription}</strong>
+              Description: <strong style={{ color: "var(--text)" }}>{rootMaterialDescription}</strong>
             </span>
             <span>
-              Queried material MRP controller: <strong style={{ color: "var(--text)" }}>{rootMrpLabel}</strong>
+              MRP: <strong style={{ color: "var(--text)" }}>{rootMrpLabel}</strong>
             </span>
+            {items.length > 0 && (
+              <span>
+                {items.length} rows · click a node to see time details
+              </span>
+            )}
           </div>
         )}
       </div>
@@ -548,27 +718,18 @@ export default function BomExplorer() {
                     onClick={() => toggleMrp(entry.label)}
                     aria-pressed={entry.active}
                     style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: ".4rem",
+                      display: "inline-flex", alignItems: "center", gap: ".4rem",
                       borderRadius: 999,
                       border: `1px solid ${entry.active ? `${entry.color}aa` : "var(--border)"}`,
                       background: entry.active ? entry.chipFill : "rgba(255,255,255,.03)",
                       color: entry.active ? "var(--text)" : "var(--text-muted)",
-                      padding: ".28rem .62rem",
-                      cursor: "pointer",
-                      fontSize: ".8rem",
-                      outline: "none",
-                      boxShadow: "none",
-                      appearance: "none",
-                      WebkitAppearance: "none",
+                      padding: ".28rem .62rem", cursor: "pointer", fontSize: ".8rem",
+                      outline: "none", boxShadow: "none", appearance: "none", WebkitAppearance: "none",
                     }}
                   >
                     <span
                       style={{
-                        width: 10,
-                        height: 10,
-                        borderRadius: 999,
+                        width: 10, height: 10, borderRadius: 999,
                         background: entry.active ? entry.color : "#4b4f62",
                         boxShadow: `0 0 0 1px ${entry.active ? `${entry.color}66` : "#4b4f6299"}`,
                         display: "inline-block",
@@ -581,7 +742,7 @@ export default function BomExplorer() {
               </div>
             </div>
           )}
-          <div className="bom-graph-wrap">
+          <div className="bom-graph-wrap" style={{ position: "relative" }}>
             <ReactFlow
               nodes={nodes}
               edges={edges}
@@ -589,22 +750,33 @@ export default function BomExplorer() {
               edgeTypes={edgeTypes}
               fitView
               minZoom={0.1}
-              onNodeClick={(_, node) => {
-                if (node.type === "bomNode") navigate(`/materials/${node.id}`);
-              }}
+              onNodeClick={handleNodeClick}
             >
               <Background color="var(--border)" gap={24} size={1} />
               <Controls />
               <MiniMap
                 nodeColor={(node) => {
-                  const data = node.data as Record<string, unknown>;
-                  if (Boolean(data?.dimmed)) return "#4b4f62";
-                  if (node.type === "mrpGroup") return String(data?.groupAccent ?? "#2e3250");
-                  return String(data?.mrpColor ?? "var(--accent)");
+                  const d = node.data as Record<string, unknown>;
+                  if (Boolean(d?.dimmed)) return "#4b4f62";
+                  if (node.type === "mrpGroup") return String(d?.groupAccent ?? "#2e3250");
+                  return String(d?.mrpColor ?? "var(--accent)");
                 }}
                 maskColor="rgba(15,17,23,.7)"
               />
             </ReactFlow>
+
+            {selectedNode && (
+              <NodeDetailPanel
+                node={selectedNode}
+                items={items}
+                onClose={() => setSelectedNode(null)}
+                onNavigate={() => navigate(`/materials/${selectedNode.id}`)}
+                onViewScrap={() => {
+                  setScrapChainFor(selectedNode.id);
+                  setSelectedNode(null);
+                }}
+              />
+            )}
           </div>
         </>
       )}
@@ -612,7 +784,7 @@ export default function BomExplorer() {
       {!loading && items.length > 0 && viewMode === "table" && (
         <div className="card">
           <div style={{ marginBottom: ".5rem", color: "var(--text-muted)", fontSize: ".85rem" }}>
-            {items.length} BOM rows expanded
+            {items.length} BOM rows — click a row to view details
           </div>
           <div className="data-table-wrap">
             <table className="data-table">
@@ -620,28 +792,65 @@ export default function BomExplorer() {
                 <tr>
                   <th>Depth</th><th>Parent</th><th>Component</th><th>Description</th>
                   <th>Type</th><th>MRP</th><th>Qty/Parent</th><th>Total Qty</th>
-                  <th>Machine (min)</th><th>Labor (min)</th>
+                  <th>Machine/unit (min)</th><th>Machine total (min)</th>
+                  <th>Labor/unit (min)</th><th>Labor total (min)</th>
                 </tr>
               </thead>
               <tbody>
-                {items.map((it, i) => (
-                  <tr key={i} className="clickable" onClick={() => navigate(`/materials/${it.component}`)}>
-                    <td style={{ fontFamily: "var(--mono)" }}>{it.depth}</td>
-                    <td style={{ fontFamily: "var(--mono)", fontSize: ".8rem" }}>{it.parent}</td>
-                    <td style={{ fontFamily: "var(--mono)", fontSize: ".8rem" }}>{it.component}</td>
-                    <td title={it.description ?? ""}>{it.description ?? "—"}</td>
-                    <td><TypeBadge type={it.materialType} /></td>
-                    <td style={{ fontFamily: "var(--mono)", fontSize: ".78rem" }}>{it.mrpController ?? "—"}</td>
-                    <td>{it.qtyPerParent.toFixed(3)}</td>
-                    <td>{it.totalQuantity.toFixed(3)}</td>
-                    <td>{it.totalMachineMin > 0 ? it.totalMachineMin.toFixed(2) : "—"}</td>
-                    <td>{it.totalLaborMin   > 0 ? it.totalLaborMin.toFixed(2)   : "—"}</td>
-                  </tr>
-                ))}
+                {items.map((it, i) => {
+                  const perUnitMachine = it.totalQuantity > 0 ? it.totalMachineMin / it.totalQuantity : 0;
+                  const perUnitLabor   = it.totalQuantity > 0 ? it.totalLaborMin   / it.totalQuantity : 0;
+                  return (
+                    <tr
+                      key={i}
+                      className="clickable"
+                      onClick={() => setSelectedNode({
+                        id: it.component, description: it.description ?? null,
+                        materialType: it.materialType ?? null, mrpController: it.mrpController ?? null,
+                        requiredQty: it.totalQuantity, requiredUnit: it.unit,
+                        totalMachineMin: it.totalMachineMin, totalLaborMin: it.totalLaborMin,
+                      })}
+                    >
+                      <td style={{ fontFamily: "var(--mono)" }}>{it.depth}</td>
+                      <td style={{ fontFamily: "var(--mono)", fontSize: ".8rem" }}>{it.parent}</td>
+                      <td style={{ fontFamily: "var(--mono)", fontSize: ".8rem" }}>{it.component}</td>
+                      <td title={it.description ?? ""}>{it.description ?? "—"}</td>
+                      <td><TypeBadge type={it.materialType} /></td>
+                      <td style={{ fontFamily: "var(--mono)", fontSize: ".78rem" }}>{it.mrpController ?? "—"}</td>
+                      <td>{it.qtyPerParent.toFixed(3)}</td>
+                      <td>{it.totalQuantity.toFixed(3)}</td>
+                      <td>{perUnitMachine > 0 ? perUnitMachine.toFixed(2) : "—"}</td>
+                      <td>{it.totalMachineMin > 0 ? it.totalMachineMin.toFixed(2) : "—"}</td>
+                      <td>{perUnitLabor   > 0 ? perUnitLabor.toFixed(2)   : "—"}</td>
+                      <td>{it.totalLaborMin   > 0 ? it.totalLaborMin.toFixed(2)   : "—"}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
         </div>
+      )}
+
+      {/* Node detail panel for table view */}
+      {selectedNode && viewMode === "table" && (
+        <div className="card" style={{ marginTop: "1rem" }}>
+          <NodeDetailPanel
+            node={selectedNode}
+            items={items}
+            onClose={() => setSelectedNode(null)}
+            onNavigate={() => navigate(`/materials/${selectedNode.id}`)}
+            onViewScrap={() => {
+              setScrapChainFor(selectedNode.id);
+              setSelectedNode(null);
+            }}
+          />
+        </div>
+      )}
+
+      {/* Scrap chain panel */}
+      {scrapChainFor && (
+        <ScrapChainPanel materialId={scrapChainFor} onClose={() => setScrapChainFor(null)} />
       )}
     </>
   );

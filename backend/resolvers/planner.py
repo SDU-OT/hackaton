@@ -1,11 +1,21 @@
 from collections import defaultdict
 from resolvers import bom as bom_resolver
 from resolvers import material as mat_resolver
+from db import query
+
+
+def _root_routing(material_id: str, quantity: float):
+    rows = query("""
+        SELECT total_machine_min, total_labor_min
+        FROM routing_agg WHERE material = ?
+    """, [material_id])
+    if not rows or rows[0][0] is None:
+        return 0.0, 0.0
+    return float(rows[0][0]) * quantity, float(rows[0][1]) * quantity
 
 
 def build_plan(material_id: str, quantity: float):
-    resolved_id = bom_resolver.resolve_material_id(material_id) or (material_id or "").strip()
-    explosion = bom_resolver.explode(resolved_id, quantity, max_depth=15)
+    explosion = bom_resolver.explode(material_id, quantity, max_depth=15)
 
     agg = defaultdict(lambda: {
         "total_quantity":    0.0,
@@ -14,7 +24,6 @@ def build_plan(material_id: str, quantity: float):
         "depth":             0,
         "description":       None,
         "material_type":     None,
-        "material_group":    None,
         "unit":              "",
     })
 
@@ -27,9 +36,20 @@ def build_plan(material_id: str, quantity: float):
         a["depth"]              = max(a["depth"], item["depth"])
         a["description"]        = item["description"]
         a["material_type"]      = item["material_type"]
-        a["material_group"]     = item["material_group"]
         a["unit"]               = item["unit"]
         max_depth_seen          = max(max_depth_seen, item["depth"])
+
+    # Include root material's own routing at depth 0
+    root_machine, root_labor = _root_routing(material_id, quantity)
+    root = mat_resolver.get_material(material_id)
+    if root_machine > 0 or root_labor > 0:
+        agg[material_id]["total_quantity"]    = quantity
+        agg[material_id]["total_machine_min"] = root_machine
+        agg[material_id]["total_labor_min"]   = root_labor
+        agg[material_id]["depth"]             = 0
+        agg[material_id]["description"]       = root["description"] if root else None
+        agg[material_id]["material_type"]     = root.get("material_type") if root else None
+        agg[material_id]["unit"]              = "PC"
 
     components = []
     for component, data in agg.items():
@@ -37,7 +57,6 @@ def build_plan(material_id: str, quantity: float):
             "component":         component,
             "description":       data["description"],
             "material_type":     data["material_type"],
-            "material_group":    data["material_group"],
             "unit":              data["unit"],
             "total_quantity":    data["total_quantity"],
             "depth":             data["depth"],
@@ -50,13 +69,12 @@ def build_plan(material_id: str, quantity: float):
     total_machine = sum(c["total_machine_min"] for c in components)
     total_labor   = sum(c["total_labor_min"]   for c in components)
 
-    root = mat_resolver.get_material(resolved_id)
     return {
-        "root_material":       resolved_id,
-        "root_description":    root["description"] if root else None,
-        "requested_quantity":  quantity,
-        "components":          components,
-        "total_machine_min":   total_machine,
-        "total_labor_min":     total_labor,
-        "max_depth_reached":   max_depth_seen,
+        "root_material":      material_id,
+        "root_description":   root["description"] if root else None,
+        "requested_quantity": quantity,
+        "components":         components,
+        "total_machine_min":  total_machine,
+        "total_labor_min":    total_labor,
+        "max_depth_reached":  max_depth_seen,
     }

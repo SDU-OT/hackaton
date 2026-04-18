@@ -57,6 +57,7 @@ export const GET_BOM_EXPLOSION = gql`
       component
       description
       materialType
+      materialGroup
       mrpController
       unit
       qtyPerParent
@@ -152,6 +153,8 @@ export const GET_SCRAP_STATS = gql`
       totalScrap
       totalDelivered
       scrapRatePct
+      avgStdPrice
+      totalScrapCost
     }
   }
 `;
@@ -179,6 +182,102 @@ export const GET_DASHBOARD_STATS = gql`
         totalScrap
         scrapRatePct
       }
+    }
+  }
+`;
+
+export const GET_SCRAP_CHAIN = gql`
+  query GetScrapChain($materialId: String!) {
+    scrapChain(materialId: $materialId) {
+      component
+      description
+      depth
+      pathStr
+      qtyPerScrappedUnit
+      totalQtyWasted
+      machineMinWasted
+      laborMinWasted
+      estimatedCost
+    }
+  }
+`;
+
+export const GET_AGGREGATE_SCRAP_SANKEY = gql`
+  query GetAggregateScrapSankey {
+    aggregateScrapSankey {
+      nodes {
+        id
+        label
+        value
+      }
+      links {
+        source
+        target
+        value
+      }
+    }
+  }
+`;
+
+export const GET_DB_TABLES = gql`
+  query GetDbTables {
+    dbTables {
+      name
+      rowCount
+      columns
+    }
+  }
+`;
+
+export const GET_TABLE_PREVIEW = gql`
+  query GetTablePreview($tableName: String!, $limit: Int, $offset: Int) {
+    tablePreview(tableName: $tableName, limit: $limit, offset: $offset) {
+      tableName
+      columns
+      rows
+      total
+    }
+  }
+`;
+
+export const GET_IMPORTED_DATASETS = gql`
+  query GetImportedDatasets {
+    importedDatasets {
+      name
+      sourceFile
+      tableName
+      rowCount
+      importedAt
+    }
+  }
+`;
+
+export const IMPORT_DATASET = gql`
+  mutation ImportDataset($name: String!, $csvContent: String!, $targetTable: String!, $columnMapping: String) {
+    importDataset(name: $name, csvContent: $csvContent, targetTable: $targetTable, columnMapping: $columnMapping) {
+      name
+      tableName
+      rowCount
+    }
+  }
+`;
+
+export const REMOVE_DATASET = gql`
+  mutation RemoveDataset($name: String!) {
+    removeDataset(name: $name)
+  }
+`;
+
+export const GET_MATERIAL_SCRAP = gql`
+  query GetMaterialScrap($materialId: String!) {
+    materialScrap(materialId: $materialId) {
+      material
+      totalOrdered
+      totalScrap
+      totalDelivered
+      scrapRatePct
+      avgStdPrice
+      totalScrapCost
     }
   }
 `;
