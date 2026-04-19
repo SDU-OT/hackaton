@@ -15,7 +15,13 @@ import {
   LineChart, Line, BarChart, Bar,
   XAxis, YAxis, Tooltip, CartesianGrid,
   ResponsiveContainer, Legend,
+  PieChart, Pie, Cell,
 } from "recharts";
+
+const SCRAP_REASON_COLORS = [
+  "#ef4444", "#f97316", "#eab308", "#22c55e",
+  "#3b82f6", "#a855f7", "#ec4899", "#14b8a6",
+];
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -454,13 +460,41 @@ function ScrapInfoPanel({
           </div>
         )}
 
-        {/* Failure reasons table */}
+        {/* Failure reasons pie chart + table */}
         {data.scrapReasons.length > 0 && (
           <div>
             <h4 style={{ margin: "0 0 .5rem", fontSize: ".85rem", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: ".05em" }}>
-              Top Failure Reasons
+              Scrap by Failure Reason
             </h4>
-            <div className="data-table-wrap" style={{ maxHeight: 200, overflowY: "auto" }}>
+            <ResponsiveContainer width="100%" height={220}>
+              <PieChart>
+                <Pie
+                  data={data.scrapReasons}
+                  dataKey="unitsScrapped"
+                  nameKey="reason"
+                  cx="50%"
+                  cy="50%"
+                  outerRadius={80}
+                  label={({ percent }: { percent: number }) =>
+                    percent > 0.05 ? `${(percent * 100).toFixed(0)}%` : ""
+                  }
+                  labelLine={false}
+                >
+                  {data.scrapReasons.map((_r, i) => (
+                    <Cell key={i} fill={SCRAP_REASON_COLORS[i % SCRAP_REASON_COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip
+                  formatter={(v: number) => [
+                    v.toLocaleString(undefined, { maximumFractionDigits: 1 }),
+                    "Units Scrapped",
+                  ]}
+                  contentStyle={{ background: "var(--bg2)", border: "1px solid var(--border)", borderRadius: 8 }}
+                />
+                <Legend iconSize={10} wrapperStyle={{ fontSize: ".75rem" }} />
+              </PieChart>
+            </ResponsiveContainer>
+            <div className="data-table-wrap" style={{ maxHeight: 160, overflowY: "auto", marginTop: ".5rem" }}>
               <table className="data-table" style={{ fontSize: ".78rem" }}>
                 <thead>
                   <tr>
@@ -472,7 +506,10 @@ function ScrapInfoPanel({
                 <tbody>
                   {data.scrapReasons.map((r, i) => (
                     <tr key={i}>
-                      <td>{r.reason}</td>
+                      <td style={{ display: "flex", alignItems: "center", gap: ".4rem" }}>
+                        <span style={{ display: "inline-block", width: 10, height: 10, borderRadius: 2, background: SCRAP_REASON_COLORS[i % SCRAP_REASON_COLORS.length], flexShrink: 0 }} />
+                        {r.reason}
+                      </td>
                       <td style={{ textAlign: "right", fontFamily: "var(--mono)" }}>{r.count.toLocaleString()}</td>
                       <td style={{ textAlign: "right", fontFamily: "var(--mono)", color: "var(--red)", fontWeight: 600 }}>
                         {r.unitsScrapped.toLocaleString(undefined, { maximumFractionDigits: 1 })}
