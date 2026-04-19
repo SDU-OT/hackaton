@@ -143,11 +143,21 @@ export default function MaterialDetail() {
 
   if (compareMode) {
     return (
-      <>
-        <div className="page-header">
+      <div style={{ display: "flex", flexDirection: "column", height: "calc(100vh - 52px)" }}>
+        {/* Compare header */}
+        <div className="page-header" style={{ display: "flex", alignItems: "center", gap: ".75rem", flexWrap: "wrap", flexShrink: 0 }}>
           <button className="btn btn-ghost" onClick={() => navigate(-1)}>← Back</button>
-          <h1 style={{ fontFamily: "var(--mono)", fontSize: "1.3rem" }}>{mat.material}</h1>
-          <TypeBadge type={mat.materialType} />
+          <div style={{ display: "flex", alignItems: "center", gap: ".5rem" }}>
+            <span style={{ fontSize: ".75rem", color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: ".06em" }}>Comparing</span>
+            <span style={{ fontFamily: "var(--mono)", fontWeight: 700 }}>{mat.material}</span>
+            <TypeBadge type={mat.materialType} />
+          </div>
+          {compareId && (
+            <>
+              <span style={{ color: "var(--text-secondary)", fontWeight: 700, fontSize: "1.1rem" }}>vs</span>
+              <span style={{ fontFamily: "var(--mono)", fontWeight: 700 }}>{compareId}</span>
+            </>
+          )}
           <button
             className="btn btn-secondary"
             style={{ marginLeft: "auto" }}
@@ -156,18 +166,20 @@ export default function MaterialDetail() {
             ✕ Exit Compare
           </button>
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1.25rem", padding: "0 2rem" }}>
-          <div style={{ minWidth: 0, height: "calc(100vh - 180px)", overflowY: "auto", paddingRight: 4 }}>
+
+        {/* Two-column compare layout — fills remaining height exactly */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1.5rem", padding: "0 2rem", flex: 1, overflow: "hidden" }}>
+          <div style={{ minWidth: 0, overflowY: "auto", paddingRight: 6 }}>
             <MaterialCompareColumn materialId={materialId} />
           </div>
-          <div style={{ minWidth: 0, height: "calc(100vh - 180px)", overflowY: "auto", paddingRight: 4 }}>
+          <div style={{ minWidth: 0, overflowY: "auto", paddingRight: 6 }}>
             {compareId
               ? <MaterialCompareColumn materialId={compareId} onClear={() => setCompareId(null)} />
               : <CompareSearchBox exclude={materialId} onSelect={setCompareId} />
             }
           </div>
         </div>
-      </>
+      </div>
     );
   }
 
@@ -465,64 +477,62 @@ function MaterialCompareColumn({ materialId, onClear }: { materialId: string; on
   const totalLabor   = ops.reduce((s, o) => s + (o.laborMin  ?? 0), 0);
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-      {/* Header */}
-      <div className="card" style={{ paddingBottom: ".75rem" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: ".6rem", marginBottom: ".75rem" }}>
-          <span style={{ fontFamily: "var(--mono)", fontWeight: 700, fontSize: "1.05rem" }}>{mat.material}</span>
+    <div style={{ display: "flex", flexDirection: "column", gap: "1rem", paddingBottom: "1.5rem" }}>
+
+      {/* ── Material identity card ── */}
+      <div className="card">
+        <div style={{ display: "flex", alignItems: "center", gap: ".6rem", marginBottom: ".85rem", paddingBottom: ".75rem", borderBottom: "1px solid var(--border)" }}>
+          <span style={{ fontFamily: "var(--mono)", fontWeight: 700, fontSize: "1.1rem" }}>{mat.material}</span>
           <TypeBadge type={mat.materialType} />
           {onClear && (
             <button
               className="btn btn-ghost"
               style={{ marginLeft: "auto", fontSize: ".75rem", padding: ".2rem .6rem" }}
               onClick={onClear}
-              title="Change comparison material"
             >
               ⇄ Change
             </button>
           )}
         </div>
-        <div style={{ display: "flex", gap: "1.25rem", flexWrap: "wrap" }}>
-          <Info label="Description"   value={mat.description} />
-          <Info label="Group"         value={mat.materialGroup} />
-          <Info label="Plant"         value={mat.plant} />
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: ".65rem 1.5rem" }}>
+          <Info label="Description"    value={mat.description} />
+          <Info label="Group"          value={mat.materialGroup} />
+          <Info label="Plant"          value={mat.plant} />
           <Info label="MRP Controller" value={mat.mrpController} />
-          <Info label="Weight"        value={mat.weightKg != null ? `${mat.weightKg} kg` : undefined} />
-          <Info label="Status"        value={mat.status} />
-          <Info label="Has BOM"       value={mat.hasBom ? "Yes" : "No"} />
-          <Info label="Has Routing"   value={mat.hasRouting ? "Yes" : "No"} />
+          <Info label="Weight"         value={mat.weightKg != null ? `${mat.weightKg} kg` : undefined} />
+          <Info label="Status"         value={mat.status} />
+          <Info label="Has BOM"        value={mat.hasBom ? "Yes" : "No"} />
+          <Info label="Has Routing"    value={mat.hasRouting ? "Yes" : "No"} />
         </div>
       </div>
 
-      {/* Scrap stats */}
-      {scrap && (
-        <div className="card">
-          <h4 style={{ margin: "0 0 .65rem", fontSize: ".85rem", textTransform: "uppercase", letterSpacing: ".05em", color: "var(--text-secondary)" }}>Scrap Stats</h4>
-          <div style={{ display: "flex", gap: "1.25rem", flexWrap: "wrap" }}>
-            <Info label="Total Ordered"  value={scrap.totalOrdered.toLocaleString()} />
-            <Info label="Units Produced" value={scrap.totalDelivered.toLocaleString()} />
-            <Info label="Avg Throughput" value={scrap.avgThroughputMin != null ? `${scrap.avgThroughputMin.toFixed(1)} min` : undefined} />
-            <Info label="Scrap Cost"     value={scrap.totalScrapCost != null ? `${scrap.totalScrapCost.toLocaleString("da-DK", { maximumFractionDigits: 0 })} kr.` : undefined} />
-            <div>
-              <div style={{ fontSize: ".75rem", color: "var(--text-muted)", marginBottom: ".2rem" }}>Scrap Rate</div>
-              <ScrapBadge pct={scrap.scrapRatePct} />
-            </div>
+      {/* ── Scrap stats card (always same height via fixed grid) ── */}
+      <div className="card">
+        <CmpSectionHeader label="Scrap Stats" />
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: ".65rem 1.5rem" }}>
+          <Info label="Total Ordered"  value={scrap ? scrap.totalOrdered.toLocaleString() : undefined} />
+          <Info label="Units Produced" value={scrap ? scrap.totalDelivered.toLocaleString() : undefined} />
+          <Info label="Avg Throughput" value={scrap?.avgThroughputMin != null ? `${scrap.avgThroughputMin.toFixed(1)} min` : undefined} />
+          <Info label="Scrap Cost"     value={scrap?.totalScrapCost != null ? `${scrap.totalScrapCost.toLocaleString("da-DK", { maximumFractionDigits: 0 })} kr.` : undefined} />
+          <div>
+            <div style={{ fontSize: ".75rem", color: "var(--text-muted)", marginBottom: ".2rem" }}>Scrap Rate</div>
+            {scrap ? <ScrapBadge pct={scrap.scrapRatePct} /> : <span style={{ color: "var(--text-muted)" }}>—</span>}
           </div>
         </div>
-      )}
+      </div>
 
-      {/* BOM children */}
-      {mat.hasBom && (
-        <div className="card">
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: ".6rem" }}>
-            <h4 style={{ margin: 0, fontSize: ".85rem", textTransform: "uppercase", letterSpacing: ".05em", color: "var(--text-secondary)" }}>
-              BOM — {children.length} components
-            </h4>
+      {/* ── BOM children ── */}
+      <div className="card">
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: ".65rem" }}>
+          <CmpSectionHeader label={`BOM — ${children.length} component${children.length !== 1 ? "s" : ""}`} />
+          {mat.hasBom && (
             <Link to={`/bom/${mat.material}`} className="btn btn-ghost" style={{ fontSize: ".75rem", padding: ".2rem .6rem" }}>
               Full BOM →
             </Link>
-          </div>
-          <div className="data-table-wrap" style={{ maxHeight: 220, overflowY: "auto" }}>
+          )}
+        </div>
+        {mat.hasBom && children.length > 0 ? (
+          <div className="data-table-wrap" style={{ maxHeight: 220, overflowY: "auto", overflowX: "auto" }}>
             <table className="data-table" style={{ fontSize: ".78rem" }}>
               <thead>
                 <tr>
@@ -550,19 +560,21 @@ function MaterialCompareColumn({ materialId, onClear }: { materialId: string; on
               </tbody>
             </table>
           </div>
-        </div>
-      )}
+        ) : (
+          <div style={{ fontSize: ".82rem", color: "var(--text-muted)" }}>No BOM data.</div>
+        )}
+      </div>
 
-      {/* Routing summary */}
-      {mat.hasRouting && ops.length > 0 && (
-        <div className="card">
-          <h4 style={{ margin: "0 0 .65rem", fontSize: ".85rem", textTransform: "uppercase", letterSpacing: ".05em", color: "var(--text-secondary)" }}>
-            Routing — {ops.length} operations
-          </h4>
-          <div style={{ display: "flex", gap: "1.5rem", marginBottom: ".65rem" }}>
-            <Info label="Total Machine" value={`${totalMachine.toFixed(1)} min`} />
-            <Info label="Total Labor"   value={`${totalLabor.toFixed(1)} min`} />
-          </div>
+      {/* ── Routing summary ── */}
+      <div className="card">
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: ".65rem" }}>
+          <CmpSectionHeader label={`Routing — ${ops.length} operation${ops.length !== 1 ? "s" : ""}`} />
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: ".65rem 1.5rem", marginBottom: ".65rem" }}>
+          <Info label="Total Machine" value={`${totalMachine.toFixed(1)} min`} />
+          <Info label="Total Labor"   value={`${totalLabor.toFixed(1)} min`} />
+        </div>
+        {mat.hasRouting && ops.length > 0 ? (
           <div className="data-table-wrap" style={{ maxHeight: 160, overflowY: "auto" }}>
             <table className="data-table" style={{ fontSize: ".78rem" }}>
               <thead><tr><th>#</th><th>Description</th><th>WC</th><th>Machine</th><th>Labor</th></tr></thead>
@@ -579,10 +591,12 @@ function MaterialCompareColumn({ materialId, onClear }: { materialId: string; on
               </tbody>
             </table>
           </div>
-        </div>
-      )}
+        ) : (
+          <div style={{ fontSize: ".82rem", color: "var(--text-muted)" }}>No routing data.</div>
+        )}
+      </div>
 
-      {/* Scrap charts */}
+      {/* ── Scrap charts ── */}
       {ts && (
         <ScrapInfoPanel
           data={ts}
@@ -591,6 +605,14 @@ function MaterialCompareColumn({ materialId, onClear }: { materialId: string; on
         />
       )}
     </div>
+  );
+}
+
+function CmpSectionHeader({ label }: { label: string }) {
+  return (
+    <h4 style={{ margin: 0, fontSize: ".78rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: ".07em", color: "var(--text-secondary)" }}>
+      {label}
+    </h4>
   );
 }
 
