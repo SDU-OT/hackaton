@@ -31,6 +31,14 @@ export default function MaterialDetail() {
   const navigate = useNavigate();
   const materialId = id!;
 
+  const handleBack = () => {
+    if (window.history.length > 1) {
+      navigate(-1);
+      return;
+    }
+    navigate("/materials");
+  };
+
   // BOM children sort state
   const [sortBy,  setSortBy]  = useState<BomSortCol>("component");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
@@ -129,10 +137,21 @@ export default function MaterialDetail() {
 
   return (
     <>
-      <div className="page-header">
-        <button className="btn btn-ghost" onClick={() => navigate(-1)}>← Back</button>
-        <h1 style={{ fontFamily: "var(--mono)", fontSize: "1.3rem" }}>{mat.material}</h1>
-        <TypeBadge type={mat.materialType} />
+      <div className="page-header material-detail-header">
+        <button className="btn material-back-btn" type="button" onClick={handleBack}>
+          <span className="material-back-btn-arrow" aria-hidden="true">&lt;</span>
+          <span>Back to Materials</span>
+        </button>
+        <div className="material-detail-title-wrap">
+          <div className="material-detail-kicker">Material View</div>
+          <div className="material-detail-title-row">
+            <h1 className="material-detail-title">{mat.material}</h1>
+            <TypeBadge type={mat.materialType} />
+          </div>
+          <p className="material-detail-subtitle">
+            Information about this material and the components used to produce it.
+          </p>
+        </div>
       </div>
 
       {/* Overview card — static fields + scrap stats */}

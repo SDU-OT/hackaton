@@ -156,6 +156,93 @@ html, body, #root {
   margin: 0 0 20px;
 }
 
+/* ── Material Detail Header ───────────────────────────────────────────────── */
+
+.material-detail-header {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 20px;
+  padding: 18px 22px;
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--red);
+  background: linear-gradient(180deg, #ffffff 0%, #fafafa 100%);
+}
+
+.material-back-btn {
+  align-self: flex-start;
+  background: var(--white);
+  color: var(--text-heading);
+  border: 1.5px solid var(--border);
+  padding: 8px 12px;
+  font-size: 11px;
+}
+
+.material-back-btn:hover {
+  background: #fff5f5;
+  border-color: var(--red);
+  color: var(--red);
+}
+
+.material-back-btn-arrow {
+  font-family: "Consolas", "Menlo", monospace;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.material-detail-title-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.material-detail-kicker {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--red);
+}
+
+.material-detail-title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.material-detail-title {
+  margin: 0;
+  font-size: 1.6rem;
+  font-weight: 700;
+  line-height: 1.15;
+  color: var(--text-heading);
+  font-family: "Consolas", "Menlo", monospace;
+}
+
+.material-detail-subtitle {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  max-width: 72ch;
+}
+
+@media (max-width: 720px) {
+  .material-detail-header {
+    padding: 14px 14px;
+    gap: 10px;
+  }
+
+  .material-detail-title {
+    font-size: 1.25rem;
+  }
+
+  .material-detail-subtitle {
+    font-size: 0.84rem;
+  }
+}
+
 /* ── Cards ───────────────────────────────────────────────────────────────────── */
 
 .card {
