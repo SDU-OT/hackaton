@@ -42,8 +42,8 @@ def get_material_catalog(
     order_dir = "DESC" if sort_dir.lower() == "desc" else "ASC"
     type_filter = (material_type or "").strip()
 
-    where_clauses = ["(mm.material ILIKE ? OR mm.description ILIKE ?)"]
-    where_params: list = [pattern, pattern]
+    where_clauses = ["(mm.material ILIKE ? OR mm.description ILIKE ?)", "UPPER(TRIM(mm.material)) <> UPPER(?)"]
+    where_params: list = [pattern, pattern, "155L7716"]
     if type_filter:
         where_clauses.append("mm.material_type = ?")
         where_params.append(type_filter)

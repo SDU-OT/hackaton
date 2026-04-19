@@ -150,7 +150,7 @@ export default function MaterialDetail() {
             <Info label="Total Ordered"   value={scrap.totalOrdered.toLocaleString()} />
             <Info label="Units Produced"  value={scrap.totalDelivered.toLocaleString()} />
             <Info label="Avg Throughput"  value={scrap.avgThroughputMin != null ? `${scrap.avgThroughputMin.toFixed(1)} min` : undefined} />
-            <Info label="Scrap Cost"      value={scrap.totalScrapCost != null ? `€ ${scrap.totalScrapCost.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : undefined} />
+            <Info label="Scrap Cost"      value={scrap.totalScrapCost != null ? `${scrap.totalScrapCost.toLocaleString("da-DK", { maximumFractionDigits: 0 })} kr.` : undefined} />
             <div>
               <div style={{ fontSize: ".75rem", color: "var(--text-muted)", marginBottom: ".2rem" }}>Scrap Rate</div>
               <ScrapBadge pct={scrap.scrapRatePct} />
@@ -196,7 +196,7 @@ export default function MaterialDetail() {
                     <td onClick={(e) => e.stopPropagation()}>
                       {c.scrapRatePct != null ? <ScrapBadge pct={c.scrapRatePct} /> : "—"}
                     </td>
-                    <td>{c.totalScrapCost != null ? `€ ${c.totalScrapCost.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : "—"}</td>
+                    <td>{c.totalScrapCost != null ? `${c.totalScrapCost.toLocaleString("da-DK", { maximumFractionDigits: 0 })} kr.` : "—"}</td>
                   </tr>
                 ))}
               </tbody>
@@ -354,7 +354,7 @@ function ScrapInfoPanel({
       <div style={{ display: "flex", alignItems: "center", gap: "1.5rem", flexWrap: "wrap", marginBottom: "1.75rem" }}>
         <div>
           <div style={{ fontSize: "2rem", fontWeight: 700, color: "var(--red)", lineHeight: 1.1 }}>
-            € {data.totalScrapCost.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+            {data.totalScrapCost.toLocaleString("da-DK", { maximumFractionDigits: 0 })} kr.
           </div>
           <div style={{ fontSize: ".78rem", color: "var(--text-muted)", marginTop: ".25rem" }}>
             Total scrap cost {displayYear ? `(${displayYear})` : ""}

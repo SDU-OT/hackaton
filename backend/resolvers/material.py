@@ -12,8 +12,8 @@ def search_materials(
     type_filter = (material_type or "").strip()
     mrp_filter = (mrp_controller or "").strip()
 
-    where_clauses = []
-    where_params = []
+    where_clauses = ["UPPER(TRIM(mm.material)) <> UPPER(?)"]
+    where_params = ["155L7716"]
 
     if search_term:
         where_clauses.append("mm.material ILIKE '%' || ? || '%'")
