@@ -17,7 +17,13 @@ import {
   LineChart, Line, BarChart, Bar,
   XAxis, YAxis, Tooltip, CartesianGrid,
   ResponsiveContainer, Legend,
+  PieChart, Pie, Cell,
 } from "recharts";
+
+const SCRAP_REASON_COLORS = [
+  "#ef4444", "#f97316", "#eab308", "#22c55e",
+  "#3b82f6", "#a855f7", "#ec4899", "#14b8a6",
+];
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -36,6 +42,14 @@ export default function MaterialDetail() {
   // Compare mode
   const [compareMode, setCompareMode] = useState(false);
   const [compareId,   setCompareId]   = useState<string | null>(null);
+
+  const handleBack = () => {
+    if (window.history.length > 1) {
+      navigate(-1);
+      return;
+    }
+    navigate("/materials");
+  };
 
   // BOM children sort state
   const [sortBy,  setSortBy]  = useState<BomSortCol>("component");
@@ -104,19 +118,6 @@ export default function MaterialDetail() {
 
   const ts = tsData?.materialScrapTimeSeries;
 
-  // Build a 12-month series so the chart always shows Jan..Dec for the selected year.
-  const monthlyScrapRateSeries = useMemo(() => {
-    if (!ts) return [] as Array<{ month: string; scrapRate: number }>;
-    const byMonth = new Map<number, number>();
-    for (const m of ts.monthlyData) {
-      byMonth.set(m.month, Number(m.scrapRatePct.toFixed(2)));
-    }
-    return MONTH_NAMES.map((label, idx) => ({
-      month: label,
-      scrapRate: byMonth.get(idx + 1) ?? 0,
-    }));
-  }, [ts]);
-
   // ── Early returns (after all hooks) ─────────────────────────────────────────
 
   if (mLoad) return <div className="spinner">Loading…</div>;
@@ -172,18 +173,29 @@ export default function MaterialDetail() {
 
   return (
     <>
-      <div className="page-header">
-        <button className="btn btn-ghost" onClick={() => navigate(-1)}>← Back</button>
-        <h1 style={{ fontFamily: "var(--mono)", fontSize: "1.3rem" }}>{mat.material}</h1>
-        <TypeBadge type={mat.materialType} />
-        <button
-          className="btn btn-secondary"
-          style={{ marginLeft: "auto" }}
-          onClick={() => setCompareMode(true)}
-          title="Compare this material side by side with another"
-        >
-          ⇄ Compare
+      <div className="page-header material-detail-header">
+        <button className="btn material-back-btn" type="button" onClick={handleBack}>
+          <span className="material-back-btn-arrow" aria-hidden="true">&lt;</span>
+          <span>Back to Materials</span>
         </button>
+        <div className="material-detail-title-wrap">
+          <div className="material-detail-kicker">Material View</div>
+          <div className="material-detail-title-row">
+            <h1 className="material-detail-title">{mat.material}</h1>
+            <TypeBadge type={mat.materialType} />
+            <button
+              className="btn btn-secondary"
+              style={{ marginLeft: "auto" }}
+              onClick={() => setCompareMode(true)}
+              title="Compare this material side by side with another"
+            >
+              ⇄ Compare
+            </button>
+          </div>
+          <p className="material-detail-subtitle">
+            Information about this material and the components used to produce it.
+          </p>
+        </div>
       </div>
 
       {/* Overview card — static fields + scrap stats */}
@@ -790,13 +802,41 @@ function ScrapInfoPanel({
           </div>
         )}
 
-        {/* Failure reasons table */}
+        {/* Failure reasons pie chart + table */}
         {data.scrapReasons.length > 0 && (
           <div>
             <h4 style={{ margin: "0 0 .5rem", fontSize: ".85rem", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: ".05em" }}>
-              Top Failure Reasons
+              Scrap by Failure Reason
             </h4>
-            <div className="data-table-wrap" style={{ maxHeight: 200, overflowY: "auto" }}>
+            <ResponsiveContainer width="100%" height={220}>
+              <PieChart>
+                <Pie
+                  data={data.scrapReasons}
+                  dataKey="unitsScrapped"
+                  nameKey="reason"
+                  cx="50%"
+                  cy="50%"
+                  outerRadius={80}
+                  label={({ percent }: { percent?: number }) =>
+                    (percent ?? 0) > 0.05 ? `${((percent ?? 0) * 100).toFixed(0)}%` : ""
+                  }
+                  labelLine={false}
+                >
+                  {data.scrapReasons.map((_r, i) => (
+                    <Cell key={i} fill={SCRAP_REASON_COLORS[i % SCRAP_REASON_COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip
+                  formatter={(v) => [
+                    Number(v ?? 0).toLocaleString(undefined, { maximumFractionDigits: 1 }),
+                    "Units Scrapped",
+                  ]}
+                  contentStyle={{ background: "var(--bg2)", border: "1px solid var(--border)", borderRadius: 8 }}
+                />
+                <Legend iconSize={10} wrapperStyle={{ fontSize: ".75rem" }} />
+              </PieChart>
+            </ResponsiveContainer>
+            <div className="data-table-wrap" style={{ maxHeight: 160, overflowY: "auto", marginTop: ".5rem" }}>
               <table className="data-table" style={{ fontSize: ".78rem" }}>
                 <thead>
                   <tr>
@@ -808,7 +848,10 @@ function ScrapInfoPanel({
                 <tbody>
                   {data.scrapReasons.map((r, i) => (
                     <tr key={i}>
-                      <td>{r.reason}</td>
+                      <td style={{ display: "flex", alignItems: "center", gap: ".4rem" }}>
+                        <span style={{ display: "inline-block", width: 10, height: 10, borderRadius: 2, background: SCRAP_REASON_COLORS[i % SCRAP_REASON_COLORS.length], flexShrink: 0 }} />
+                        {r.reason}
+                      </td>
                       <td style={{ textAlign: "right", fontFamily: "var(--mono)" }}>{r.count.toLocaleString()}</td>
                       <td style={{ textAlign: "right", fontFamily: "var(--mono)", color: "var(--red)", fontWeight: 600 }}>
                         {r.unitsScrapped.toLocaleString(undefined, { maximumFractionDigits: 1 })}

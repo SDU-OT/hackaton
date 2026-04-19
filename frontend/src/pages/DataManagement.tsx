@@ -1,65 +1,66 @@
 import { useState, useRef } from "react";
 import { useQuery, useMutation } from "@apollo/client/react";
-import { GET_IMPORTED_DATASETS, GET_DB_TABLES, IMPORT_DATASET, REMOVE_DATASET } from "../graphql/queries";
+import { GET_IMPORTED_DATASETS, GET_DB_TABLES, REMOVE_DATASET } from "../graphql/queries";
 import type { ImportedDataset, DbTable } from "../graphql/types";
+
+// ── Column definitions ────────────────────────────────────────────────────────
+
+interface ColDef { db: string; label: string; required?: boolean; example: string; }
+
+const PROD_COLS: ColDef[] = [
+  { db: "material",        label: "Material Number",            required: true,  example: "11018082" },
+  { db: "mrp_controller",  label: "MRP controller",             required: true,  example: "YKV" },
+  { db: "order_qty",       label: "Order quantity (GMEIN)",     required: true,  example: "200" },
+  { db: "scrap_qty",       label: "Confirmed scrap (GMEIN)",    required: false, example: "5" },
+  { db: "delivered_qty",   label: "Quantity Delivered (GMEIN)", required: false, example: "195" },
+  { db: "start_date",      label: "Basic start date",           required: false, example: "2025-01-15" },
+  { db: "finish_date",     label: "Basic finish date",          required: false, example: "2025-01-22" },
+  { db: "order_type",      label: "Order Type",                 required: false, example: "ZP02" },
+  { db: "sys_status",      label: "System Status",              required: false, example: "CLSD CNF DLV" },
+  { db: "mat_description", label: "Material description",       required: false, example: "OMTS 200 HYDRAULIC MOTOR" },
+];
+
+const SCRAP_COLS: ColDef[] = [
+  { db: "material",       label: "Material",             required: true,  example: "11018082" },
+  { db: "scrap_cost",     label: "Scrap Cost",           required: true,  example: "1450.00" },
+  { db: "scrap_qty_final",label: "Scrap Quantity Final", required: true,  example: "3" },
+  { db: "issue_date",     label: "IssueDate",            required: true,  example: "2025-03-10" },
+  { db: "plant",          label: "Plnt",                 required: false, example: "1201" },
+  { db: "work_center",    label: "Work ctr",             required: false, example: "WC1234" },
+  { db: "material_desc",  label: "Material Description", required: false, example: "HYDRAULIC MOTOR" },
+  { db: "order_no",       label: "Order",                required: false, example: "59657789" },
+  { db: "operation_qty",  label: "Operation Qty",        required: false, example: "200" },
+  { db: "confirmed_yield",label: "Confirmed yield",      required: false, example: "197" },
+  { db: "confirmed_scrap",label: "Confirmed scrap",      required: false, example: "3" },
+  { db: "standard_price", label: "Standard price",       required: false, example: "483.33" },
+  { db: "currency",       label: "Crcy",                 required: false, example: "DKK" },
+  { db: "cause",          label: "Cause",                required: false, example: "M01" },
+  { db: "bu",             label: "BU",                   required: false, example: "Drives" },
+];
+
+const TABLE_COLS: Record<string, ColDef[]> = {
+  production_orders: PROD_COLS,
+  scrap_records:     SCRAP_COLS,
+};
 
 const TARGET_TABLES = [
   { value: "production_orders", label: "Production Orders" },
   { value: "scrap_records",     label: "Scrap Records" },
 ];
 
-const PROD_ORDER_MAPPING: Record<string, string> = {
-  "Material Number":           "material",
-  "Order quantity (GMEIN)":    "order_qty",
-  "Confirmed scrap (GMEIN)":   "scrap_qty",
-  "Quantity Delivered (GMEIN)":"delivered_qty",
-  "Basic start date":          "start_date",
-  "Basic finish date":         "finish_date",
-  "Order Type":                "order_type",
-  "MRP controller":            "mrp_controller",
-  "System Status":             "sys_status",
-  "Material description":      "mat_description",
-};
-
-const SCRAP_MAPPING: Record<string, string> = {
-  "D[Plnt]":                  "plant",
-  "D[Work ctr]":              "work_center",
-  "D[Material]":              "material",
-  "D[Material Description]":  "material_desc",
-  "D[Order]":                 "order_no",
-  "D[Operation Qty]":         "operation_qty",
-  "D[Confirmed yield]":       "confirmed_yield",
-  "D[Confirmed scrap]":       "confirmed_scrap",
-  "D[Scrap Quantity Final]":  "scrap_qty_final",
-  "D[Scrap Cost]":            "scrap_cost",
-  "D[Standard price]":        "standard_price",
-  "D[Crcy]":                  "currency",
-  "D[IssueDate]":             "issue_date",
-  "D[Cause]":                 "cause",
-  "D[BU]":                    "bu",
-};
-
-const PRESET_MAPPINGS: Record<string, Record<string, string>> = {
-  production_orders: PROD_ORDER_MAPPING,
-  scrap_records:     SCRAP_MAPPING,
-};
-
-interface ImportDatasetMutationData {
-  importDataset: { name: string; tableName: string; rowCount: number };
-}
-interface ImportDatasetMutationVars {
-  name: string; csvContent: string; targetTable: string; columnMapping: string;
-}
 interface RemoveDatasetMutationData { removeDataset: boolean }
 interface RemoveDatasetMutationVars { name: string }
+
+// ── Component ────────────────────────────────────────────────────────────────
 
 export default function DataManagement() {
   const [importName, setImportName]       = useState("");
   const [targetTable, setTargetTable]     = useState("production_orders");
-  const [csvContent, setCsvContent]       = useState<string | null>(null);
-  const [fileName, setFileName]           = useState<string | null>(null);
-  const [importError, setImportError]     = useState<string | null>(null);
-  const [importSuccess, setImportSuccess] = useState<string | null>(null);
+  const [file, setFile]                   = useState<File | null>(null);
+  const [detectedCols, setDetectedCols]   = useState<string[]>([]);
+  const [uploading, setUploading]         = useState(false);
+  const [uploadError, setUploadError]     = useState<string | null>(null);
+  const [uploadSuccess, setUploadSuccess] = useState<string | null>(null);
   const [removing, setRemoving]           = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -67,23 +68,6 @@ export default function DataManagement() {
     useQuery<{ importedDatasets: ImportedDataset[] }>(GET_IMPORTED_DATASETS);
 
   const { data: tablesData } = useQuery<{ dbTables: DbTable[] }>(GET_DB_TABLES);
-
-  const [importDataset, { loading: importing }] = useMutation<
-    ImportDatasetMutationData, ImportDatasetMutationVars
-  >(IMPORT_DATASET, {
-    onCompleted: (d) => {
-      setImportSuccess(
-        `Imported "${d.importDataset.name}" → ${d.importDataset.tableName}: ${d.importDataset.rowCount.toLocaleString()} rows`
-      );
-      setImportError(null);
-      setImportName("");
-      setCsvContent(null);
-      setFileName(null);
-      if (fileRef.current) fileRef.current.value = "";
-      refetchDatasets();
-    },
-    onError: (e) => { setImportError(e.message); setImportSuccess(null); },
-  });
 
   const [removeDataset, { loading: removingMutation }] = useMutation<
     RemoveDatasetMutationData, RemoveDatasetMutationVars
@@ -93,23 +77,65 @@ export default function DataManagement() {
 
   const datasets = datasetsData?.importedDatasets ?? [];
   const tables   = tablesData?.dbTables ?? [];
+  const cols     = TABLE_COLS[targetTable] ?? [];
 
   function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setFileName(file.name);
-    if (!importName) setImportName(file.name.replace(/\.csv$/i, ""));
-    const reader = new FileReader();
-    reader.onload = (ev) => setCsvContent(ev.target?.result as string);
-    reader.readAsText(file);
+    const f = e.target.files?.[0];
+    if (!f) return;
+    setFile(f);
+    setDetectedCols([]);
+    setUploadError(null);
+    setUploadSuccess(null);
+    if (!importName) setImportName(f.name.replace(/\.(csv|xlsx?)$/i, ""));
+
+    // Detect columns from CSV header (peek first line)
+    if (f.name.toLowerCase().endsWith(".csv")) {
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const text = ev.target?.result as string;
+        const firstLine = text.split("\n")[0];
+        const cols = firstLine.split(",").map(c => c.trim().replace(/^"|"$/g, ""));
+        setDetectedCols(cols);
+      };
+      reader.readAsText(f.slice(0, 4096));
+    }
+    // For xlsx we can't peek easily without a parser library — just show the expected columns
   }
 
-  function doImport() {
-    if (!csvContent || !importName) return;
-    const mapping = PRESET_MAPPINGS[targetTable] ?? {};
-    importDataset({
-      variables: { name: importName, csvContent, targetTable, columnMapping: JSON.stringify(mapping) },
-    });
+  async function doUpload() {
+    if (!file || !importName) return;
+    setUploading(true);
+    setUploadError(null);
+    setUploadSuccess(null);
+
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("name", importName);
+    formData.append("target_table", targetTable);
+
+    try {
+      const res = await fetch("http://localhost:5000/api/upload", {
+        method: "POST",
+        body: formData,
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        setUploadError(json.error ?? "Upload failed");
+      } else {
+        setUploadSuccess(
+          `Imported "${json.name}" → ${json.table_name}: ${json.row_count.toLocaleString()} rows`
+        );
+        setImportName("");
+        setFile(null);
+        setDetectedCols([]);
+        if (fileRef.current) fileRef.current.value = "";
+        refetchDatasets();
+      }
+    } catch (e) {
+      setUploadError(String(e));
+    } finally {
+      setUploading(false);
+    }
   }
 
   function doRemove(name: string) {
@@ -117,71 +143,131 @@ export default function DataManagement() {
     removeDataset({ variables: { name } });
   }
 
+  // Compute column mapping status
+  const mappedCols = new Set<string>();
+  if (detectedCols.length > 0) {
+    const mapping: Record<string, string> = targetTable === "production_orders"
+      ? { "Material Number": "material", "Order quantity (GMEIN)": "order_qty", "Confirmed scrap (GMEIN)": "scrap_qty",
+          "Quantity Delivered (GMEIN)": "delivered_qty", "MRP controller": "mrp_controller",
+          "Basic start date": "start_date", "Basic finish date": "finish_date",
+          "Order Type": "order_type", "System Status": "sys_status", "Material description": "mat_description" }
+      : { "Material": "material", "Plnt": "plant", "Work ctr": "work_center",
+          "Material Description": "material_desc", "Order": "order_no", "Operation Qty": "operation_qty",
+          "Confirmed yield": "confirmed_yield", "Confirmed scrap": "confirmed_scrap",
+          "Scrap Quantity Final": "scrap_qty_final", "Scrap Cost": "scrap_cost",
+          "Standard price": "standard_price", "Crcy": "currency", "IssueDate": "issue_date",
+          "Cause": "cause", "BU": "bu" };
+    detectedCols.forEach(c => {
+      const mapped = mapping[c] ?? (cols.find(d => d.db === c) ? c : null);
+      if (mapped) mappedCols.add(mapped);
+    });
+  }
+
   return (
     <div className="page-inner">
       <h1>Data Upload</h1>
 
       {/* Import form */}
-      <div className="card" style={{ marginBottom: 24, maxWidth: 640 }}>
-        <h2 style={{ margin: "0 0 20px", fontSize: 18 }}>Import CSV Dataset</h2>
-        <div style={{ display: "grid", gap: 16 }}>
-          <div>
-            <label style={{ display: "block", fontSize: 12, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--text-secondary)", marginBottom: 6 }}>
-              Dataset name
-            </label>
-            <input
-              type="text"
-              style={{ width: "100%" }}
-              value={importName}
-              onChange={(e) => setImportName(e.target.value)}
-              placeholder="e.g. production_orders_2025"
-            />
-          </div>
+      <div className="card" style={{ marginBottom: 24 }}>
+        <h2 style={{ margin: "0 0 20px", fontSize: 18 }}>Import Dataset</h2>
+        <div className="upload-layout">
+          {/* Left: form */}
+          <div className="upload-form">
+            <div className="upload-field">
+              <label className="upload-label">Dataset name</label>
+              <input
+                type="text"
+                style={{ width: "100%", boxSizing: "border-box" }}
+                value={importName}
+                onChange={(e) => setImportName(e.target.value)}
+                placeholder="e.g. production_orders_2025"
+              />
+            </div>
 
-          <div>
-            <label style={{ display: "block", fontSize: 12, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--text-secondary)", marginBottom: 6 }}>
-              Target table
-            </label>
-            <select value={targetTable} onChange={(e) => setTargetTable(e.target.value)} style={{ width: "100%" }}>
-              {TARGET_TABLES.map((t) => (
-                <option key={t.value} value={t.value}>{t.label}</option>
-              ))}
-            </select>
-          </div>
+            <div className="upload-field">
+              <label className="upload-label">Target table</label>
+              <select
+                value={targetTable}
+                onChange={(e) => { setTargetTable(e.target.value); setDetectedCols([]); }}
+                style={{ width: "100%", boxSizing: "border-box" }}
+              >
+                {TARGET_TABLES.map((t) => (
+                  <option key={t.value} value={t.value}>{t.label}</option>
+                ))}
+              </select>
+            </div>
 
-          <div>
-            <label style={{ display: "block", fontSize: 12, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--text-secondary)", marginBottom: 6 }}>
-              CSV file
-            </label>
-            <input
-              ref={fileRef}
-              type="file"
-              accept=".csv,text/csv"
-              onChange={handleFile}
-              style={{ fontSize: 14, color: "var(--text-body)", padding: "8px 0" }}
-            />
-            {fileName && (
-              <div style={{ marginTop: 4, fontSize: 12, color: "var(--text-secondary)" }}>
-                {fileName} loaded
-              </div>
-            )}
-          </div>
+            <div className="upload-field">
+              <label className="upload-label">File (.csv or .xlsx)</label>
+              <input
+                ref={fileRef}
+                type="file"
+                accept=".csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                onChange={handleFile}
+                style={{ fontSize: 14, color: "var(--text-body)", padding: "8px 0" }}
+              />
+              {file && (
+                <div style={{ marginTop: 4, fontSize: 12, color: "var(--text-secondary)" }}>
+                  {file.name} ({(file.size / 1024).toFixed(0)} KB)
+                </div>
+              )}
+            </div>
 
-          <div style={{ fontSize: 13, color: "var(--text-secondary)", background: "var(--bg-section)", padding: "10px 14px", borderLeft: "3px solid var(--border)" }}>
-            Column mapping is applied automatically for <strong>Production Orders</strong> and <strong>Scrap Records</strong> presets. Export your .xlsx to CSV first, then import here.
-          </div>
+            {uploadError   && <div className="upload-msg upload-msg-error">{uploadError}</div>}
+            {uploadSuccess && <div className="upload-msg upload-msg-success">{uploadSuccess}</div>}
 
-          {importError   && <div style={{ color: "var(--red)", fontSize: 14 }}>{importError}</div>}
-          {importSuccess && <div style={{ color: "var(--status-green)", fontSize: 14 }}>{importSuccess}</div>}
-
-          <div>
             <button
               className="btn"
-              onClick={doImport}
-              disabled={importing || !csvContent || !importName}
+              onClick={doUpload}
+              disabled={uploading || !file || !importName}
             >
-              {importing ? "Importing…" : "Import"}
+              {uploading ? "Uploading…" : "Upload & Import"}
             </button>
+          </div>
+
+          {/* Right: column reference */}
+          <div className="upload-cols-panel">
+            <p className="upload-cols-title">
+              Expected columns for <strong>{TARGET_TABLES.find(t => t.value === targetTable)?.label}</strong>
+            </p>
+            <div className="upload-cols-table-wrap">
+              <table className="upload-cols-table">
+                <thead>
+                  <tr>
+                    <th>DB Column</th>
+                    <th>Excel / CSV Header</th>
+                    <th style={{ textAlign: "center" }}>Req.</th>
+                    {detectedCols.length > 0 && <th style={{ textAlign: "center" }}>Found</th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {cols.map((col) => {
+                    const found = detectedCols.length > 0 ? mappedCols.has(col.db) : null;
+                    return (
+                      <tr key={col.db}>
+                        <td style={{ fontFamily: "Consolas, monospace", fontSize: 11 }}>{col.db}</td>
+                        <td style={{ fontSize: 12 }}>{col.label}</td>
+                        <td style={{ textAlign: "center", fontSize: 12 }}>
+                          {col.required ? <span style={{ color: "var(--red)", fontWeight: 700 }}>✱</span> : ""}
+                        </td>
+                        {detectedCols.length > 0 && (
+                          <td style={{ textAlign: "center", fontSize: 12 }}>
+                            {found === true
+                              ? <span style={{ color: "var(--status-green)", fontWeight: 700 }}>✓</span>
+                              : found === false
+                              ? <span style={{ color: col.required ? "var(--red)" : "var(--text-secondary)" }}>—</span>
+                              : null}
+                          </td>
+                        )}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <p style={{ fontSize: 11, color: "var(--text-secondary)", margin: "8px 0 0" }}>
+              Column mapping is applied automatically. Additional columns are ignored.
+            </p>
           </div>
         </div>
       </div>
@@ -191,9 +277,7 @@ export default function DataManagement() {
         <h2 style={{ margin: "0 0 20px", fontSize: 18 }}>Imported Datasets</h2>
         {datasetsLoading && <div style={{ color: "var(--text-secondary)" }}>Loading…</div>}
         {!datasetsLoading && datasets.length === 0 && (
-          <div style={{ color: "var(--text-secondary)", fontSize: 14 }}>
-            No datasets imported yet.
-          </div>
+          <div style={{ color: "var(--text-secondary)", fontSize: 14 }}>No datasets imported yet.</div>
         )}
         {datasets.length > 0 && (
           <div className="data-table-wrap">
@@ -211,9 +295,9 @@ export default function DataManagement() {
               <tbody>
                 {datasets.map((ds) => (
                   <tr key={ds.name}>
-                    <td className="mono">{ds.name}</td>
+                    <td style={{ fontFamily: "Consolas, monospace", fontSize: 13 }}>{ds.name}</td>
                     <td style={{ fontSize: 13 }}>{ds.sourceFile}</td>
-                    <td className="mono" style={{ fontSize: 13 }}>{ds.tableName}</td>
+                    <td style={{ fontFamily: "Consolas, monospace", fontSize: 13 }}>{ds.tableName}</td>
                     <td className="num">{ds.rowCount.toLocaleString()}</td>
                     <td style={{ fontSize: 12, color: "var(--text-secondary)" }}>{ds.importedAt}</td>
                     <td>
@@ -240,16 +324,11 @@ export default function DataManagement() {
           <h2 style={{ margin: "0 0 16px", fontSize: 18 }}>Database Tables</h2>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
             {tables.map((t) => (
-              <div
-                key={t.name}
-                style={{
-                  background: "var(--bg-section)",
-                  border: "1px solid var(--border)",
-                  padding: "6px 12px",
-                  fontSize: 13,
-                }}
-              >
-                <span style={{ fontFamily: "Consolas, Menlo, monospace", color: "var(--text-body)" }}>{t.name}</span>
+              <div key={t.name} style={{
+                background: "var(--bg-section)", border: "1px solid var(--border)",
+                padding: "6px 12px", fontSize: 13,
+              }}>
+                <span style={{ fontFamily: "Consolas, monospace" }}>{t.name}</span>
                 <span style={{ color: "var(--text-secondary)", marginLeft: 8 }}>
                   {t.rowCount.toLocaleString()} rows
                 </span>

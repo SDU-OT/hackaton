@@ -326,6 +326,7 @@ class TablePreview:
     table_name: str
     columns: List[str]
     rows: List[List[str]]
+    row_ids: List[int]
     total: int
 
 
@@ -570,12 +571,16 @@ class Query:
         table_name: str,
         limit: int = 100,
         offset: int = 0,
+        search: str = "",
+        sort_col: str = "",
+        sort_dir: str = "asc",
     ) -> TablePreview:
-        d = dm_res.get_table_preview(table_name, limit, offset)
+        d = dm_res.get_table_preview(table_name, limit, offset, search, sort_col, sort_dir)
         return TablePreview(
             table_name=d["table_name"],
             columns=d["columns"],
             rows=d["rows"],
+            row_ids=d["row_ids"],
             total=d["total"],
         )
 
@@ -603,6 +608,14 @@ class Mutation:
     @strawberry.mutation
     def remove_dataset(self, name: str) -> bool:
         return dm_res.do_remove_dataset(name)
+
+    @strawberry.mutation
+    def delete_table_row(self, table_name: str, row_id: int) -> bool:
+        return dm_res.do_delete_table_row(table_name, row_id)
+
+    @strawberry.mutation
+    def insert_table_row(self, table_name: str, values_json: str) -> bool:
+        return dm_res.do_insert_table_row(table_name, values_json)
 
 
 schema = strawberry.Schema(query=Query, mutation=Mutation)
