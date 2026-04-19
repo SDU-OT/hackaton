@@ -966,3 +966,150 @@ nav a, .nav-link { color: var(--white); }
   border-color: var(--red);
   outline: none;
 }
+
+/* ── SKRAPPY AI chat ──────────────────────────────────────────────────────────── */
+
+.skrappy-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border: 1px solid var(--border);
+  background: var(--bg-section);
+  overflow: hidden;
+}
+
+.skrappy-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px 10px;
+  background: #1C2B4A;
+  border-bottom: 2px solid var(--red);
+}
+
+.skrappy-name {
+  font-size: 13px;
+  font-weight: 800;
+  color: #FFFFFF;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  margin: 0;
+  line-height: 1.2;
+}
+
+.skrappy-subtitle {
+  font-size: 10px;
+  color: rgba(255,255,255,0.55);
+  margin: 0;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.skrappy-messages {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  max-height: 280px;
+  overflow-y: auto;
+  background: var(--white);
+}
+
+.skrappy-messages::-webkit-scrollbar {
+  width: 4px;
+}
+.skrappy-messages::-webkit-scrollbar-track { background: transparent; }
+.skrappy-messages::-webkit-scrollbar-thumb { background: var(--border); }
+
+.skrappy-msg {
+  font-size: 12px;
+  line-height: 1.5;
+  padding: 9px 11px;
+  max-width: 88%;
+}
+
+.skrappy-msg p {
+  margin: 0;
+}
+
+.skrappy-msg-skrappy {
+  background: #F0F4FF;
+  border-left: 3px solid #2d4a8a;
+  align-self: flex-start;
+}
+
+.skrappy-msg-user {
+  background: var(--red);
+  color: white;
+  align-self: flex-end;
+  border-left: none;
+  border-right: 3px solid #B8001A;
+  text-align: right;
+}
+
+.skrappy-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  padding: 8px 12px 4px;
+  background: var(--white);
+  border-top: 1px solid var(--border);
+}
+
+.skrappy-pill {
+  background: white;
+  border: 1px solid var(--border);
+  color: #1C2B4A;
+  font-size: 11px;
+  padding: 5px 10px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: border-color 0.15s, color 0.15s;
+  white-space: nowrap;
+}
+
+.skrappy-pill:hover {
+  border-color: var(--red);
+  color: var(--red);
+}
+
+.skrappy-input-row {
+  display: flex;
+  border-top: 1px solid var(--border);
+}
+
+.skrappy-input {
+  flex: 1;
+  border: none;
+  padding: 10px 14px;
+  font-size: 13px;
+  font-family: inherit;
+  background: var(--white);
+  color: var(--text-body);
+  outline: none;
+  min-width: 0;
+}
+
+.skrappy-input:focus {
+  border: none;
+  outline: 2px solid var(--red);
+  outline-offset: -2px;
+}
+
+.skrappy-send-btn {
+  width: 44px;
+  height: 44px;
+  background: var(--red);
+  color: white;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background 0.15s;
+}
+
+.skrappy-send-btn:hover {
+  background: var(--red-hover);
+}
