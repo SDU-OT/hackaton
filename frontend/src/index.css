@@ -55,6 +55,12 @@ html, body, #root {
   margin-right: 16px;
 }
 
+.topnav-logo-image {
+  display: block;
+  height: 42px;
+  width: auto;
+}
+
 .topnav-logo-mark {
   background: var(--red);
   width: 28px;

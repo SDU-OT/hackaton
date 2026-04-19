@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { useQuery } from "@apollo/client/react";
 import { useNavigate } from "react-router-dom";
 import { GET_MATERIAL_CATALOG_FILTERS, MATERIAL_CATALOG } from "../graphql/queries";
@@ -8,6 +8,49 @@ import ScrapBadge from "../components/ScrapBadge";
 import Pagination from "../components/Pagination";
 
 const PAGE_SIZE = 50;
+
+type RangeState = {
+  minTotalOrders: string;
+  maxTotalOrders: string;
+  minUnitsProduced: string;
+  maxUnitsProduced: string;
+  minAvgThroughput: string;
+  maxAvgThroughput: string;
+  minScrapRate: string;
+  maxScrapRate: string;
+  minScrapCost: string;
+  maxScrapCost: string;
+};
+
+const EMPTY_RANGES: RangeState = {
+  minTotalOrders: "",
+  maxTotalOrders: "",
+  minUnitsProduced: "",
+  maxUnitsProduced: "",
+  minAvgThroughput: "",
+  maxAvgThroughput: "",
+  minScrapRate: "",
+  maxScrapRate: "",
+  minScrapCost: "",
+  maxScrapCost: "",
+};
+
+const TEXT_COLUMNS = [
+  { column: "material", label: "Material ID" },
+  { column: "description", label: "Description" },
+  { column: "mrp_controller", label: "MRP" },
+  { column: "material_type", label: "Type" },
+] as const;
+
+const RANGE_COLUMNS = [
+  { column: "total_ordered", label: "Total Orders", minKey: "minTotalOrders", maxKey: "maxTotalOrders" },
+  { column: "total_units_produced", label: "Units Produced", minKey: "minUnitsProduced", maxKey: "maxUnitsProduced" },
+  { column: "avg_throughput_min", label: "Avg Throughput", minKey: "minAvgThroughput", maxKey: "maxAvgThroughput" },
+  { column: "scrap_rate_pct", label: "Scrap Rate", minKey: "minScrapRate", maxKey: "maxScrapRate" },
+  { column: "total_scrap_cost", label: "Scrap Cost", minKey: "minScrapCost", maxKey: "maxScrapCost" },
+] as const;
+
+type RangeColumn = typeof RANGE_COLUMNS[number]["column"];
 
 function fmt(n: number | null | undefined): string {
   if (n == null) return "—";
@@ -35,7 +78,12 @@ export default function MaterialBrowser() {
   const [offset, setOffset] = useState(0);
   const [sortCol, setSortCol] = useState("material");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const [ranges, setRanges] = useState<RangeState>({ ...EMPTY_RANGES });
+  const [openRangeColumn, setOpenRangeColumn] = useState<RangeColumn | null>(null);
+  const rangePopupRef = useRef<HTMLDivElement | null>(null);
   const navigate = useNavigate();
+
+  const n = (s: string) => s !== "" ? Number(s) : null;
 
   const { data, loading, error } = useQuery<{ materialCatalog: MaterialCatalogResult }>(MATERIAL_CATALOG, {
     variables: {
@@ -46,6 +94,16 @@ export default function MaterialBrowser() {
       dateTo,
       sortBy: sortCol,
       sortDir,
+      minTotalOrders:   n(ranges.minTotalOrders),
+      maxTotalOrders:   n(ranges.maxTotalOrders),
+      minUnitsProduced: n(ranges.minUnitsProduced),
+      maxUnitsProduced: n(ranges.maxUnitsProduced),
+      minAvgThroughput: n(ranges.minAvgThroughput),
+      maxAvgThroughput: n(ranges.maxAvgThroughput),
+      minScrapRate:     n(ranges.minScrapRate),
+      maxScrapRate:     n(ranges.maxScrapRate),
+      minScrapCost:     n(ranges.minScrapCost),
+      maxScrapCost:     n(ranges.maxScrapCost),
       limit: PAGE_SIZE,
       offset,
     },
@@ -80,6 +138,11 @@ export default function MaterialBrowser() {
     setOffset(0);
   }, []);
 
+  const setRange = useCallback((key: keyof RangeState, val: string) => {
+    setRanges(prev => ({ ...prev, [key]: val }));
+    setOffset(0);
+  }, []);
+
   const handleSort = useCallback((col: string) => {
     if (col === sortCol) {
       setSortDir(d => d === "asc" ? "desc" : "asc");
@@ -98,10 +161,46 @@ export default function MaterialBrowser() {
     setMrpSearch("");
     setDateFrom("");
     setDateTo("");
+    setRanges({ ...EMPTY_RANGES });
+    setOpenRangeColumn(null);
     setOffset(0);
   }, []);
 
-  const hasFilters = committed || activeType || activeMrp || dateFrom || dateTo;
+  const toggleRangePopup = useCallback((column: RangeColumn) => {
+    setOpenRangeColumn(prev => (prev === column ? null : column));
+  }, []);
+
+  const clearSingleRange = useCallback((column: RangeColumn) => {
+    const config = RANGE_COLUMNS.find(c => c.column === column);
+    if (!config) return;
+    setRanges(prev => ({ ...prev, [config.minKey]: "", [config.maxKey]: "" }));
+    setOffset(0);
+  }, []);
+
+  useEffect(() => {
+    if (!openRangeColumn) return;
+
+    const onMouseDown = (event: MouseEvent) => {
+      if (rangePopupRef.current && !rangePopupRef.current.contains(event.target as Node)) {
+        setOpenRangeColumn(null);
+      }
+    };
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setOpenRangeColumn(null);
+      }
+    };
+
+    document.addEventListener("mousedown", onMouseDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onMouseDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [openRangeColumn]);
+
+  const hasFilters = committed || activeType || activeMrp || dateFrom || dateTo || Object.values(ranges).some(v => v !== "");
 
   return (
     <div className="materials-layout">
@@ -109,7 +208,19 @@ export default function MaterialBrowser() {
       <aside className="materials-sidebar">
 
         <div>
-          <h3>Date Range</h3>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 12 }}>
+            <h3 style={{ margin: 0 }}>Date Range</h3>
+            {hasFilters && (
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={clearFilters}
+                style={{ padding: "6px 10px", fontSize: 11, letterSpacing: "0.04em" }}
+              >
+                Clear Filters
+              </button>
+            )}
+          </div>
           <div className="filter-date-group">
             <div>
               <div className="filter-date-label">From</div>
@@ -168,11 +279,6 @@ export default function MaterialBrowser() {
           </div>
         </div>
 
-        {hasFilters && (
-          <button className="btn btn-secondary" onClick={clearFilters} style={{ marginTop: "auto" }}>
-            Clear Filters
-          </button>
-        )}
       </aside>
 
       {/* Main content */}
@@ -232,22 +338,151 @@ export default function MaterialBrowser() {
               <table className="data-table">
                 <thead>
                   <tr>
-                    {(["material","description","mrp_controller","material_type"] as const).map((col, i) => (
-                      <th key={col} onClick={() => handleSort(col)}
-                          style={{ cursor: "pointer", userSelect: "none", whiteSpace: "nowrap" }}>
-                        {["Material ID","Description","MRP","Type"][i]}
-                        <span style={{ marginLeft: 4, opacity: sortCol === col ? 1 : 0.25, fontSize: 11 }}>
-                          {sortCol === col && sortDir === "desc" ? "▼" : "▲"}
-                        </span>
+                    {TEXT_COLUMNS.map(({ column, label }) => (
+                      <th key={column} style={{ userSelect: "none", whiteSpace: "nowrap" }}>
+                        <div style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                          <span>{label}</span>
+                          <button
+                            type="button"
+                            onClick={() => handleSort(column)}
+                            aria-label={`Sort by ${label}`}
+                            style={{
+                              border: "none",
+                              background: "transparent",
+                              color: "inherit",
+                              cursor: "pointer",
+                              padding: 0,
+                              fontSize: 11,
+                              opacity: sortCol === column ? 1 : 0.25,
+                            }}
+                          >
+                            {sortCol === column && sortDir === "desc" ? "▼" : "▲"}
+                          </button>
+                        </div>
                       </th>
                     ))}
-                    {(["total_ordered","total_units_produced","avg_throughput_min","scrap_rate_pct","total_scrap_cost"] as const).map((col, i) => (
-                      <th key={col} className="num" onClick={() => handleSort(col)}
-                          style={{ cursor: "pointer", userSelect: "none", whiteSpace: "nowrap" }}>
-                        {["Total Orders","Units Produced","Avg Throughput","Scrap Rate","Scrap Cost"][i]}
-                        <span style={{ marginLeft: 4, opacity: sortCol === col ? 1 : 0.25, fontSize: 11 }}>
-                          {sortCol === col && sortDir === "desc" ? "▼" : "▲"}
-                        </span>
+
+                    {RANGE_COLUMNS.map(({ column, label, minKey, maxKey }) => (
+                      <th key={column} className="num" style={{ userSelect: "none", whiteSpace: "nowrap", position: "relative" }}>
+                        <div style={{ display: "inline-flex", alignItems: "center", justifyContent: "flex-end", gap: 6 }}>
+                          <button
+                            type="button"
+                            onClick={() => toggleRangePopup(column)}
+                            style={{
+                              border: "none",
+                              background: "transparent",
+                              color: "inherit",
+                              cursor: "pointer",
+                              padding: 0,
+                              textDecoration: "underline",
+                              textUnderlineOffset: "2px",
+                            }}
+                          >
+                            {label}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleSort(column)}
+                            aria-label={`Sort by ${label}`}
+                            style={{
+                              border: "none",
+                              background: "transparent",
+                              color: "inherit",
+                              cursor: "pointer",
+                              padding: 0,
+                              fontSize: 11,
+                              opacity: sortCol === column ? 1 : 0.25,
+                            }}
+                          >
+                            {sortCol === column && sortDir === "desc" ? "▼" : "▲"}
+                          </button>
+                        </div>
+
+                        {openRangeColumn === column && (
+                          <div
+                            ref={rangePopupRef}
+                            style={{
+                              position: "absolute",
+                              top: "calc(100% + 8px)",
+                              right: 0,
+                              zIndex: 20,
+                              background: "var(--white)",
+                              border: "1px solid var(--border)",
+                              boxShadow: "0 8px 20px rgba(0, 0, 0, 0.16)",
+                              padding: 10,
+                              minWidth: 210,
+                            }}
+                          >
+                            <div style={{ color: "var(--text-secondary)", fontSize: 11, marginBottom: 8 }}>
+                              {label} range
+                            </div>
+                            <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", alignItems: "center", gap: 6 }}>
+                              <input
+                                type="number"
+                                min={0}
+                                placeholder="min"
+                                value={ranges[minKey]}
+                                onChange={e => setRange(minKey, e.target.value)}
+                                style={{
+                                  width: "100%",
+                                  fontSize: 12,
+                                  padding: "4px 6px",
+                                  border: "1px solid var(--border)",
+                                  background: "var(--white)",
+                                  color: "var(--text-body)",
+                                  fontFamily: "inherit",
+                                }}
+                              />
+                              <span style={{ color: "var(--text-secondary)", fontSize: 12 }}>—</span>
+                              <input
+                                type="number"
+                                min={0}
+                                placeholder="max"
+                                value={ranges[maxKey]}
+                                onChange={e => setRange(maxKey, e.target.value)}
+                                style={{
+                                  width: "100%",
+                                  fontSize: 12,
+                                  padding: "4px 6px",
+                                  border: "1px solid var(--border)",
+                                  background: "var(--white)",
+                                  color: "var(--text-body)",
+                                  fontFamily: "inherit",
+                                }}
+                              />
+                            </div>
+                            <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8 }}>
+                              <button
+                                type="button"
+                                onClick={() => clearSingleRange(column)}
+                                style={{
+                                  border: "1px solid var(--border)",
+                                  background: "transparent",
+                                  color: "var(--text-body)",
+                                  cursor: "pointer",
+                                  fontSize: 11,
+                                  padding: "4px 8px",
+                                }}
+                              >
+                                Clear
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setOpenRangeColumn(null)}
+                                style={{
+                                  border: "1px solid var(--border)",
+                                  background: "transparent",
+                                  color: "var(--text-body)",
+                                  cursor: "pointer",
+                                  fontSize: 11,
+                                  padding: "4px 8px",
+                                }}
+                              >
+                                Close
+                              </button>
+                            </div>
+                          </div>
+                        )}
                       </th>
                     ))}
                   </tr>
