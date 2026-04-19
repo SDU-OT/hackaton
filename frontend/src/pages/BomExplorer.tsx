@@ -260,47 +260,56 @@ function NodeDetailPanel({
   return (
     <div
       style={{
-        position: "absolute", top: 12, right: 12, width: 280, zIndex: 100,
-        background: "var(--white)", border: "1px solid var(--border)",
-        borderRadius: 10, padding: "1rem",
-        boxShadow: "0 8px 32px rgba(0,0,0,.4)", fontSize: ".82rem",
+        position: "absolute", top: 12, right: 12, width: 290, zIndex: 100,
+        background: "var(--white)",
+        border: "1px solid var(--border)",
+        borderLeft: "4px solid var(--red)",
+        padding: "1rem",
+        boxShadow: "0 4px 16px rgba(0,0,0,.10)",
+        fontSize: ".82rem",
       }}
     >
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: ".7rem" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: ".6rem" }}>
         <div>
-          <div style={{ fontFamily: "var(--mono)", fontWeight: 700, fontSize: ".9rem" }}>{node.id}</div>
-          <div style={{ color: "var(--text-muted)", marginTop: ".2rem" }}>{node.description ?? "—"}</div>
+          <div style={{ fontSize: ".68rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: ".08em", color: "var(--red)", marginBottom: ".2rem" }}>
+            Component
+          </div>
+          <div style={{ fontFamily: "var(--mono)", fontWeight: 700, fontSize: ".95rem", color: "var(--text-heading)" }}>{node.id}</div>
+          <div style={{ color: "var(--text-secondary)", marginTop: ".15rem", fontSize: ".8rem" }}>{node.description ?? "—"}</div>
         </div>
-        <button onClick={onClose} style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: "1.1rem", lineHeight: 1 }}>×</button>
+        <button
+          onClick={onClose}
+          style={{ background: "none", border: "none", color: "var(--text-secondary)", cursor: "pointer", fontSize: "1.1rem", lineHeight: 1, padding: "0 .2rem" }}
+        >×</button>
       </div>
 
       {node.materialType && (
-        <div style={{ marginBottom: ".6rem" }}><TypeBadge type={node.materialType} /></div>
+        <div style={{ marginBottom: ".7rem" }}><TypeBadge type={node.materialType} /></div>
       )}
 
-      <div style={{ display: "grid", gap: ".4rem", marginBottom: ".8rem" }}>
-        <Row label="MRP Controller"              value={node.mrpController ?? "—"} />
-        <Row label="Ideal Quantity"              value={`${node.requiredQty.toFixed(node.requiredQty % 1 === 0 ? 0 : 4)} ${node.requiredUnit}`} />
-        <Row label="Scrap rate"                  value={`${node.scrapRatePct.toFixed(2)}%`} />
-        <Row label="Actual Quantity"             value={`${node.actualRequiredQty.toFixed(node.actualRequiredQty % 1 === 0 ? 0 : 4)} ${node.requiredUnit}`} strong valueColor="var(--red)" />
-      </div>
-
-      <div style={{ borderTop: "1px solid var(--border)", paddingTop: ".6rem", marginBottom: ".8rem" }}>
-        <div style={{ color: "var(--text-muted)", fontSize: ".75rem", marginBottom: ".4rem", textTransform: "uppercase", letterSpacing: ".04em" }}>
-          Routing time
-        </div>
-        <div style={{ display: "grid", gap: ".3rem" }}>
-          <Row label="Machine / unit"        value={formatMin(perUnitMachine)} accent />
-          <Row label="Machine × qty"         value={formatMin(node.totalMachineMin)} accent />
-          <Row label="Labor / unit"          value={formatMin(perUnitLabor)} />
-          <Row label="Labor × qty"           value={formatMin(node.totalLaborMin)} />
-          <Row label="Total (machine+labor)" value={formatMin(node.totalMachineMin + node.totalLaborMin)} strong />
+      <div style={{ background: "var(--bg-section)", padding: ".6rem .75rem", marginBottom: ".75rem" }}>
+        <div style={{ display: "grid", gap: ".35rem" }}>
+          <Row label="MRP Controller" value={node.mrpController ?? "—"} />
+          <Row label="Planned Qty"    value={`${node.requiredQty.toFixed(node.requiredQty % 1 === 0 ? 0 : 4)} ${node.requiredUnit}`} />
+          <Row label="Scrap Rate"     value={`${node.scrapRatePct.toFixed(2)}%`} />
+          <Row label="Actual Qty"     value={`${node.actualRequiredQty.toFixed(node.actualRequiredQty % 1 === 0 ? 0 : 4)} ${node.requiredUnit}`} strong valueColor="var(--red)" />
         </div>
       </div>
 
-      <div style={{ display: "flex", gap: ".5rem", flexWrap: "wrap" }}>
-        <button className="btn btn-ghost" style={{ fontSize: ".78rem" }} onClick={onNavigate}>Material detail →</button>
-        <button className="btn btn-ghost" style={{ fontSize: ".78rem" }} onClick={onViewScrap}>Scrap chain →</button>
+      <div style={{ fontSize: ".72rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: ".06em", color: "var(--text-secondary)", marginBottom: ".4rem" }}>
+        Routing Time
+      </div>
+      <div style={{ display: "grid", gap: ".3rem", marginBottom: ".85rem" }}>
+        <Row label="Machine / unit"        value={formatMin(perUnitMachine)} accent />
+        <Row label="Machine × qty"         value={formatMin(node.totalMachineMin)} accent />
+        <Row label="Labor / unit"          value={formatMin(perUnitLabor)} />
+        <Row label="Labor × qty"           value={formatMin(node.totalLaborMin)} />
+        <Row label="Total"                 value={formatMin(node.totalMachineMin + node.totalLaborMin)} strong />
+      </div>
+
+      <div style={{ display: "flex", gap: ".5rem", borderTop: "1px solid var(--border)", paddingTop: ".6rem" }}>
+        <button className="btn btn-ghost" style={{ fontSize: ".75rem", padding: ".35rem .75rem" }} onClick={onNavigate}>Material detail →</button>
+        <button className="btn btn-ghost" style={{ fontSize: ".75rem", padding: ".35rem .75rem" }} onClick={onViewScrap}>Scrap chain →</button>
       </div>
     </div>
   );
@@ -674,7 +683,7 @@ export default function BomExplorer() {
           strokeWidth: isMuted ? 1.25 : isMaterialFlow ? 1.8 : 1.5,
           opacity: isMuted ? 0.24 : isMaterialFlow ? 0.72 : 0.85,
           strokeDasharray: isMaterialFlow ? "4 4" : undefined,
-          strokeLinecap: isMaterialFlow ? "round" : undefined,
+          strokeLinecap: isMaterialFlow ? ("round" as const) : undefined,
         },
         markerEnd: { type: MarkerType.ArrowClosed, color },
       };
@@ -730,190 +739,212 @@ export default function BomExplorer() {
     });
   }, [selectedNode]);
 
+  const hasCommitted = Boolean(committed);
+
   return (
-    <>
-      <div className="page-header"><h1>BOM Explorer</h1></div>
+    <div className="page">
+      <div className="page-inner">
 
-      <div className="card">
-        <div className="search-bar">
-          <input
-            value={searchId}
-            onChange={(e) => setSearchId(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && commit()}
-            placeholder="Material ID…"
-          />
-          <button className="btn btn-primary" onClick={commit}>Load</button>
-          <div className="depth-slider">
-            <span style={{ fontSize: ".8rem", color: "var(--text-muted)" }}>Depth:</span>
-            <input type="range" min={1} max={15} value={depth} onChange={(e) => setDepth(Number(e.target.value))} />
-            <span style={{ fontWeight: 700, color: "var(--accent)" }}>{depth}</span>
+        {/* ── Page header ── */}
+        <div className="material-detail-header" style={{ marginBottom: "1.5rem" }}>
+          <div className="material-detail-kicker">Bill of Materials</div>
+          <div className="material-detail-title-row">
+            <h1 className="material-detail-title" style={{ fontSize: "1.5rem" }}>
+              {hasCommitted ? rootMaterialId : "BOM Explorer"}
+            </h1>
           </div>
-          <button className="btn btn-ghost" onClick={() => setViewMode(viewMode === "graph" ? "table" : "graph")}>
-            {viewMode === "graph" ? "Table View" : "Graph View"}
-          </button>
+          {hasCommitted && rootMaterialDescription !== "—" && (
+            <p className="material-detail-subtitle">{rootMaterialDescription}</p>
+          )}
+          {!hasCommitted && (
+            <p className="material-detail-subtitle">
+              Enter a material ID to explode its bill of materials and visualise component dependencies.
+            </p>
+          )}
         </div>
-        {committed && (
-          <div style={{ marginTop: ".65rem", fontSize: ".82rem", color: "var(--text-muted)", display: "flex", gap: "1.2rem", flexWrap: "wrap" }}>
-            <span>Description: <strong style={{ color: "var(--text)" }}>{rootMaterialDescription}</strong></span>
-            <span>MRP: <strong style={{ color: "var(--text)" }}>{rootMrpLabel}</strong></span>
-            {items.length > 0 && <span>{items.length} rows · click a node to see time details</span>}
+
+        {/* ── Toolbar ── */}
+        <div className="card" style={{ marginBottom: "1rem" }}>
+          <div style={{ display: "flex", gap: ".75rem", alignItems: "center", flexWrap: "wrap" }}>
+            <input
+              value={searchId}
+              onChange={(e) => setSearchId(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && commit()}
+              placeholder="Material ID…"
+              style={{ flex: "1 1 180px", height: 40, padding: "0 12px", fontSize: 14, border: "1px solid var(--border)", fontFamily: "inherit" }}
+            />
+            <button className="btn" style={{ height: 40, padding: "0 20px" }} onClick={commit}>Load</button>
+            <div style={{ display: "flex", alignItems: "center", gap: ".5rem", whiteSpace: "nowrap" }}>
+              <span style={{ fontSize: ".82rem", color: "var(--text-secondary)" }}>Depth</span>
+              <input
+                type="range" min={1} max={15} value={depth}
+                onChange={(e) => setDepth(Number(e.target.value))}
+                style={{ width: 90 }}
+              />
+              <span style={{ fontWeight: 700, fontFamily: "var(--mono)", fontSize: ".88rem", color: "var(--text-heading)", minWidth: "1.5ch" }}>{depth}</span>
+            </div>
+            <button className="btn btn-ghost" style={{ height: 40 }} onClick={() => setViewMode(viewMode === "graph" ? "table" : "graph")}>
+              {viewMode === "graph" ? "Table View" : "Graph View"}
+            </button>
           </div>
-        )}
-      </div>
-
-      {tooLarge && (
-        <div className="error-msg">
-          BOM has {items.length} nodes — showing first {MAX_NODES}. Reduce depth or switch to Table View.
-        </div>
-      )}
-
-      {loading && <div className="spinner">Exploding BOM…</div>}
-      {error   && <div className="error-msg">{error.message}</div>}
-
-      {!loading && committed && items.length === 0 && (
-        <div className="spinner">No BOM found for {committed}.</div>
-      )}
-
-      {!loading && items.length > 0 && viewMode === "graph" && (
-        <>
-          {mrpLegend.length > 0 && (
-            <div className="card" style={{ color: "var(--text-muted)", fontSize: ".82rem", paddingTop: ".8rem", paddingBottom: ".8rem" }}>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: ".55rem .95rem", alignItems: "center" }}>
-                {mrpLegend.map((entry) => (
-                  <button
-                    key={entry.label}
-                    type="button"
-                    className="mrp-chip-btn"
-                    onClick={() => toggleMrp(entry.label)}
-                    aria-pressed={entry.active}
-                    style={{
-                      display: "inline-flex", alignItems: "center", gap: ".4rem",
-                      borderRadius: 999,
-                      border: `1px solid ${entry.active ? `${entry.color}aa` : "var(--border)"}`,
-                      background: entry.active ? entry.chipFill : "rgba(255,255,255,.03)",
-                      color: entry.active ? "var(--text)" : "var(--text-muted)",
-                      padding: ".28rem .62rem", cursor: "pointer", fontSize: ".8rem",
-                      outline: "none", boxShadow: "none", appearance: "none", WebkitAppearance: "none",
-                    }}
-                  >
-                    <span style={{
-                      width: 10, height: 10, borderRadius: 999,
-                      background: entry.active ? entry.color : "#4b4f62",
-                      boxShadow: `0 0 0 1px ${entry.active ? `${entry.color}66` : "#4b4f6299"}`,
-                      display: "inline-block",
-                    }} />
-                    <strong style={{ color: entry.active ? "var(--text)" : "var(--text-muted)" }}>{entry.label}</strong>
-                    <span>({entry.count})</span>
-                  </button>
-                ))}
-              </div>
+          {hasCommitted && (
+            <div style={{ marginTop: ".65rem", paddingTop: ".65rem", borderTop: "1px solid var(--border)", fontSize: ".82rem", color: "var(--text-secondary)", display: "flex", gap: "1.4rem", flexWrap: "wrap" }}>
+              <span>MRP: <strong style={{ color: "var(--text-heading)" }}>{rootMrpLabel}</strong></span>
+              {items.length > 0 && (
+                <span>{items.length} BOM rows · click a node for details</span>
+              )}
             </div>
           )}
-          <div className="bom-graph-wrap" style={{ position: "relative" }}>
-            <ReactFlow
-              nodes={nodes}
-              edges={edges}
-              nodeTypes={nodeTypes}
-              edgeTypes={edgeTypes}
-              fitView
-              minZoom={0.1}
-              onNodeClick={handleNodeClick}
-            >
-              <Background color="var(--border)" gap={24} size={1} />
-              <Controls />
-              <MiniMap
-                nodeColor={(node) => {
-                  const d = node.data as Record<string, unknown>;
-                  if (Boolean(d?.dimmed)) return "#4b4f62";
-                  if (node.type === "mrpGroup")      return String(d?.groupAccent ?? "#2e3250");
-                  return String(d?.mrpColor ?? "var(--accent)");
-                }}
-                maskColor="rgba(15,17,23,.7)"
-              />
-            </ReactFlow>
+        </div>
 
-            {selectedNode && (
-              <NodeDetailPanel
-                node={selectedNode}
-                items={items}
-                onClose={() => setSelectedNode(null)}
-                onNavigate={() => navigate(`/materials/${selectedNode.id}`)}
-                onViewScrap={() => { setScrapChainFor(selectedNode.id); setSelectedNode(null); }}
-              />
-            )}
+        {tooLarge && (
+          <div className="card" style={{ borderLeft: "4px solid var(--status-amber)", background: "#fffbf0", marginBottom: "1rem", fontSize: ".85rem", color: "var(--text-body)" }}>
+            BOM has {items.length} nodes — showing first {MAX_NODES}. Reduce depth or switch to Table View.
           </div>
-        </>
-      )}
+        )}
 
-      {!loading && items.length > 0 && viewMode === "table" && (
-        <div className="card">
-          <div style={{ marginBottom: ".5rem", color: "var(--text-muted)", fontSize: ".85rem" }}>
-            {items.length} BOM rows — click a row to view details
+        {loading && <div className="spinner">Exploding BOM…</div>}
+        {error   && <div className="card" style={{ borderLeft: "4px solid var(--red)", color: "var(--red)", fontSize: ".85rem" }}>{error.message}</div>}
+
+        {!loading && hasCommitted && items.length === 0 && (
+          <div className="card" style={{ color: "var(--text-secondary)", fontSize: ".9rem" }}>
+            No BOM found for <strong style={{ fontFamily: "var(--mono)" }}>{committed}</strong>.
           </div>
-          <div className="data-table-wrap">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Depth</th><th>Parent</th><th>Component</th><th>Description</th>
-                  <th>Type</th><th>MRP</th><th>Qty/Parent</th><th>Ideal Quantity</th><th>Scrap %</th><th style={{ color: "var(--red)" }}>Actual Quantity</th>
-                  <th>Machine/unit (min)</th><th>Machine total (min)</th>
-                  <th>Labor/unit (min)</th><th>Labor total (min)</th>
-                </tr>
-              </thead>
-              <tbody>
-                {items.map((it, i) => {
-                  const perUnitMachine = it.totalQuantity > 0 ? it.totalMachineMin / it.totalQuantity : 0;
-                  const perUnitLabor   = it.totalQuantity > 0 ? it.totalLaborMin   / it.totalQuantity : 0;
-                  return (
-                    <tr
-                      key={i}
-                      className="clickable"
-                      onClick={() => setSelectedNode({
-                        id: it.component, description: it.description ?? null,
-                        materialType: it.materialType ?? null, mrpController: it.mrpController ?? null,
-                        requiredQty: it.totalQuantity, requiredUnit: it.unit,
-                        actualRequiredQty: it.adjustedTotalQuantity, scrapRatePct: Number(it.scrapRatePct ?? 0),
-                        totalMachineMin: it.totalMachineMin, totalLaborMin: it.totalLaborMin,
-                      })}
+        )}
+
+        {/* ── Graph view ── */}
+        {!loading && items.length > 0 && viewMode === "graph" && (
+          <>
+            {mrpLegend.length > 0 && (
+              <div className="card" style={{ paddingTop: ".75rem", paddingBottom: ".75rem", marginBottom: "1rem" }}>
+                <div style={{ fontSize: ".72rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: ".06em", color: "var(--text-secondary)", marginBottom: ".5rem" }}>
+                  MRP Controllers — click to toggle
+                </div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: ".4rem .6rem", alignItems: "center" }}>
+                  {mrpLegend.map((entry) => (
+                    <button
+                      key={entry.label}
+                      type="button"
+                      onClick={() => toggleMrp(entry.label)}
+                      aria-pressed={entry.active}
+                      style={{
+                        display: "inline-flex", alignItems: "center", gap: ".35rem",
+                        border: `1.5px solid ${entry.active ? entry.color : "var(--border)"}`,
+                        background: entry.active ? entry.chipFill : "transparent",
+                        color: entry.active ? "var(--text-body)" : "var(--text-secondary)",
+                        padding: ".28rem .65rem", cursor: "pointer", fontSize: ".8rem",
+                        fontFamily: "inherit", outline: "none",
+                      }}
                     >
-                      <td style={{ fontFamily: "var(--mono)" }}>{it.depth}</td>
-                      <td style={{ fontFamily: "var(--mono)", fontSize: ".8rem" }}>{it.parent}</td>
-                      <td style={{ fontFamily: "var(--mono)", fontSize: ".8rem" }}>{it.component}</td>
-                      <td title={it.description ?? ""}>{it.description ?? "—"}</td>
-                      <td><TypeBadge type={it.materialType} /></td>
-                      <td style={{ fontFamily: "var(--mono)", fontSize: ".78rem" }}>{it.mrpController ?? "—"}</td>
-                      <td>{it.qtyPerParent.toFixed(3)}</td>
-                      <td>{it.totalQuantity.toFixed(3)}</td>
-                      <td>{(it.scrapRatePct ?? 0).toFixed(2)}%</td>
-                      <td style={{ color: "var(--red)", fontWeight: 700 }}>{it.adjustedTotalQuantity.toFixed(3)}</td>
-                      <td>{perUnitMachine > 0 ? perUnitMachine.toFixed(2) : "—"}</td>
-                      <td>{it.totalMachineMin > 0 ? it.totalMachineMin.toFixed(2) : "—"}</td>
-                      <td>{perUnitLabor   > 0 ? perUnitLabor.toFixed(2)   : "—"}</td>
-                      <td>{it.totalLaborMin   > 0 ? it.totalLaborMin.toFixed(2)   : "—"}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                      <span style={{
+                        width: 8, height: 8,
+                        background: entry.active ? entry.color : "var(--border)",
+                        display: "inline-block", flexShrink: 0,
+                      }} />
+                      <strong>{entry.label}</strong>
+                      <span style={{ opacity: .7 }}>({entry.count})</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            <div className="bom-graph-wrap" style={{ position: "relative" }}>
+              <ReactFlow
+                nodes={nodes}
+                edges={edges}
+                nodeTypes={nodeTypes}
+                edgeTypes={edgeTypes}
+                fitView
+                minZoom={0.1}
+                onNodeClick={handleNodeClick}
+              >
+                <Background color="var(--border)" gap={24} size={1} />
+                <Controls />
+                <MiniMap
+                  nodeColor={(node) => {
+                    const d = node.data as Record<string, unknown>;
+                    if (Boolean(d?.dimmed)) return "var(--border)";
+                    if (node.type === "mrpGroup") return String(d?.groupAccent ?? "var(--accent)");
+                    return String(d?.mrpColor ?? "var(--accent)");
+                  }}
+                  maskColor="rgba(245,245,245,0.75)"
+                />
+              </ReactFlow>
+
+              {selectedNode && (
+                <NodeDetailPanel
+                  node={selectedNode}
+                  items={items}
+                  onClose={() => setSelectedNode(null)}
+                  onNavigate={() => navigate(`/materials/${selectedNode.id}`)}
+                  onViewScrap={() => { setScrapChainFor(selectedNode.id); setSelectedNode(null); }}
+                />
+              )}
+            </div>
+          </>
+        )}
+
+        {/* ── Table view ── */}
+        {!loading && items.length > 0 && viewMode === "table" && (
+          <div className="card">
+            <div style={{ marginBottom: ".75rem", color: "var(--text-secondary)", fontSize: ".85rem" }}>
+              {items.length} BOM rows
+            </div>
+            <div className="data-table-wrap">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Depth</th><th>Parent</th><th>Component</th><th>Description</th>
+                    <th>Type</th><th>MRP</th><th>Qty/Parent</th><th>Planned Qty</th>
+                    <th>Scrap %</th><th>Actual Qty</th>
+                    <th>Machine/unit</th><th>Machine total</th>
+                    <th>Labor/unit</th><th>Labor total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {items.map((it, i) => {
+                    const perUnitMachine = it.totalQuantity > 0 ? it.totalMachineMin / it.totalQuantity : 0;
+                    const perUnitLabor   = it.totalQuantity > 0 ? it.totalLaborMin   / it.totalQuantity : 0;
+                    const depthColors = ["#EFF3FA", "#EFF8F2", "#FAF5EC", "#FAF0F6", "#EFF8F8"];
+                    const depthBorderColors = ["#2D4A8A", "#27AE60", "#7A5C20", "#8A2D5A", "#2D6A6A"];
+                    const di = (it.depth - 1) % depthColors.length;
+                    return (
+                      <tr
+                        key={i}
+                        style={{
+                          background: depthColors[di],
+                          borderLeft: `3px solid ${depthBorderColors[di]}`,
+                        }}
+                      >
+                        <td style={{ fontFamily: "var(--mono)", fontWeight: 700 }}>{it.depth}</td>
+                        <td style={{ fontFamily: "var(--mono)", fontSize: ".8rem", color: "var(--text-secondary)" }}>{it.parent}</td>
+                        <td style={{ fontFamily: "var(--mono)", fontSize: ".8rem" }}>{it.component}</td>
+                        <td title={it.description ?? ""}>{it.description ?? "—"}</td>
+                        <td><TypeBadge type={it.materialType} /></td>
+                        <td style={{ fontFamily: "var(--mono)", fontSize: ".78rem" }}>{it.mrpController ?? "—"}</td>
+                        <td style={{ textAlign: "right", fontFamily: "var(--mono)" }}>{it.qtyPerParent.toFixed(3)}</td>
+                        <td style={{ textAlign: "right", fontFamily: "var(--mono)" }}>{it.totalQuantity.toFixed(3)}</td>
+                        <td style={{ textAlign: "right", fontFamily: "var(--mono)" }}>{(it.scrapRatePct ?? 0).toFixed(2)}%</td>
+                        <td style={{ textAlign: "right", fontFamily: "var(--mono)", color: "var(--red)", fontWeight: 700 }}>{it.adjustedTotalQuantity.toFixed(3)}</td>
+                        <td style={{ textAlign: "right", fontFamily: "var(--mono)" }}>{perUnitMachine > 0 ? perUnitMachine.toFixed(2) : "—"}</td>
+                        <td style={{ textAlign: "right", fontFamily: "var(--mono)" }}>{it.totalMachineMin > 0 ? it.totalMachineMin.toFixed(2) : "—"}</td>
+                        <td style={{ textAlign: "right", fontFamily: "var(--mono)" }}>{perUnitLabor   > 0 ? perUnitLabor.toFixed(2)   : "—"}</td>
+                        <td style={{ textAlign: "right", fontFamily: "var(--mono)" }}>{it.totalLaborMin   > 0 ? it.totalLaborMin.toFixed(2)   : "—"}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {selectedNode && viewMode === "table" && (
-        <div className="card" style={{ marginTop: "1rem" }}>
-          <NodeDetailPanel
-            node={selectedNode}
-            items={items}
-            onClose={() => setSelectedNode(null)}
-            onNavigate={() => navigate(`/materials/${selectedNode.id}`)}
-            onViewScrap={() => { setScrapChainFor(selectedNode.id); setSelectedNode(null); }}
-          />
-        </div>
-      )}
 
-      {scrapChainFor && (
-        <ScrapChainPanel materialId={scrapChainFor} onClose={() => setScrapChainFor(null)} />
-      )}
-    </>
+        {scrapChainFor && (
+          <ScrapChainPanel materialId={scrapChainFor} onClose={() => setScrapChainFor(null)} />
+        )}
+
+      </div>
+    </div>
   );
 }
