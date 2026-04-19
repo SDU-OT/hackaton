@@ -21,8 +21,8 @@ import {
 } from "recharts";
 
 const SCRAP_REASON_COLORS = [
-  "#ef4444", "#f97316", "#eab308", "#22c55e",
-  "#3b82f6", "#a855f7", "#ec4899", "#14b8a6",
+  "#E2001A", "#E67E22", "#F39C12", "#27AE60",
+  "#2D4A8A", "#7A5C20", "#8A2D5A", "#2D6A6A",
 ];
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -249,30 +249,7 @@ export default function MaterialDetail() {
               </thead>
               <tbody>
                 {sortedChildren.map((c) => (
-                  <tr key={c.component} className="clickable" onClick={() => navigate(`/materials/${c.component}`)}>
-                    <td><code style={{ fontFamily: "var(--mono)", fontSize: ".8rem" }}>{c.component}</code></td>
-                    <td title={c.description ?? ""}>{c.description ?? "—"}</td>
-                    <td><TypeBadge type={c.materialType} /></td>
-                    <td>{c.quantity.toFixed(3)}</td>
-                    {(() => {
-                      const actualQty = c.quantity * (1 + (c.scrapRatePct ?? 0) / 100);
-                      const isHigher = actualQty > c.quantity;
-                      return (
-                        <td style={isHigher ? { color: "var(--red)", fontWeight: 600 } : undefined}>
-                          {isHigher
-                            ? `${actualQty.toFixed(3)} (${c.scrapRatePct!.toFixed(1)}% scrap)`
-                            : c.quantity.toFixed(3)}
-                        </td>
-                      );
-                    })()}
-                    <td>{c.unit}</td>
-                    <td>{c.itemCategory}</td>
-                    <td>{c.hasChildren ? "✓" : ""}</td>
-                    <td onClick={(e) => e.stopPropagation()}>
-                      {c.scrapRatePct != null ? <ScrapBadge pct={c.scrapRatePct} /> : "—"}
-                    </td>
-                    <td>{c.totalScrapCost != null ? `${c.totalScrapCost.toLocaleString("da-DK", { maximumFractionDigits: 0 })} kr.` : "—"}</td>
-                  </tr>
+                  <BomRow key={c.component} item={c} depth={0} />
                 ))}
               </tbody>
             </table>
@@ -649,6 +626,75 @@ function SortTh({
   );
 }
 
+// ── BOM Row (recursive, expandable) ──────────────────────────────────────────
+
+const BOM_DEPTH_COLORS = ["#2D4A8A", "#27AE60", "#7A5C20", "#8A2D5A", "#2D6A6A"];
+const BOM_DEPTH_BG     = ["#EFF3FA", "#EFF8F2", "#FAF5EC", "#FAF0F6", "#EFF8F8"];
+
+function BomRow({ item, depth }: { item: BomItem; depth: number }) {
+  const [expanded, setExpanded] = useState(false);
+  const navigate = useNavigate();
+  const { data, loading } = useQuery<{ bomChildren: BomItem[] }>(GET_BOM_CHILDREN, {
+    variables: { materialId: item.component },
+    skip: !expanded || !item.hasChildren,
+  });
+
+  const adjQty = item.quantity * (1 + (item.scrapRatePct ?? 0) / 100);
+  const indent = depth * 24;
+  const depthColor = BOM_DEPTH_COLORS[depth % BOM_DEPTH_COLORS.length];
+  const depthBg    = depth > 0 ? BOM_DEPTH_BG[(depth - 1) % BOM_DEPTH_BG.length] : undefined;
+
+  return (
+    <>
+      <tr style={{ borderLeft: depth > 0 ? `3px solid ${depthColor}` : undefined, background: depthBg }}>
+        <td>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: ".25rem", paddingLeft: indent }}>
+            {item.hasChildren ? (
+              <button
+                onClick={() => setExpanded((v) => !v)}
+                style={{ background: "none", border: "none", cursor: "pointer", color: "var(--accent)", fontSize: ".8rem", padding: "0 .15rem", lineHeight: 1 }}
+                title={expanded ? "Collapse" : "Expand ingredients"}
+              >
+                {expanded ? "▾" : "▸"}
+              </button>
+            ) : (
+              <span style={{ display: "inline-block", width: "1rem" }} />
+            )}
+            <code
+              style={{ fontFamily: "var(--mono)", fontSize: ".8rem", cursor: "pointer", color: "var(--accent)" }}
+              onClick={() => navigate(`/materials/${item.component}`)}
+              title="Open material detail"
+            >
+              {item.component}
+            </code>
+          </span>
+        </td>
+        <td title={item.description ?? ""}>{item.description ?? "—"}</td>
+        <td><TypeBadge type={item.materialType} /></td>
+        <td style={{ textAlign: "right", fontFamily: "var(--mono)" }}>{item.quantity.toFixed(3)}</td>
+        <td style={{ textAlign: "right", fontFamily: "var(--mono)", color: item.scrapRatePct ? "var(--orange)" : undefined }}>
+          {adjQty.toFixed(3)}
+        </td>
+        <td>{item.unit}</td>
+        <td>{item.itemCategory}</td>
+        <td style={{ textAlign: "center" }}>{item.hasChildren ? "✓" : ""}</td>
+        <td>{item.scrapRatePct != null ? <ScrapBadge pct={item.scrapRatePct} /> : "—"}</td>
+        <td>{item.totalScrapCost != null ? `${item.totalScrapCost.toLocaleString("da-DK", { maximumFractionDigits: 0 })} kr.` : "—"}</td>
+      </tr>
+      {expanded && loading && (
+        <tr style={{ background: BOM_DEPTH_BG[depth % BOM_DEPTH_BG.length], borderLeft: `3px solid ${BOM_DEPTH_COLORS[depth % BOM_DEPTH_COLORS.length]}` }}>
+          <td colSpan={10} style={{ paddingLeft: indent + 28, color: "var(--text-muted)", fontSize: ".8rem" }}>
+            Loading…
+          </td>
+        </tr>
+      )}
+      {expanded && data?.bomChildren.map((child) => (
+        <BomRow key={child.component} item={child} depth={depth + 1} />
+      ))}
+    </>
+  );
+}
+
 // ── Scrap Info Panel ──────────────────────────────────────────────────────────
 
 const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
@@ -795,8 +841,8 @@ function ScrapInfoPanel({
                 <YAxis tick={{ fontSize: 11 }} />
                 <Tooltip />
                 <Legend iconSize={10} wrapperStyle={{ fontSize: ".78rem" }} />
-                <Bar dataKey="yield" name="Yield"  stackId="a" fill="#22c55e" />
-                <Bar dataKey="scrap" name="Scrap"  stackId="a" fill="#ef4444" />
+                <Bar dataKey="yield" name="Yield"  stackId="a" fill="#27AE60" />
+                <Bar dataKey="scrap" name="Scrap"  stackId="a" fill="#E2001A" />
               </BarChart>
             </ResponsiveContainer>
           </div>

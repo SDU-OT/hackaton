@@ -5,11 +5,18 @@
   --red-hover:     #B8001A;
   --white:         #FFFFFF;
   --bg-section:    #F5F5F5;
+  --bg2:           #F5F5F5;
   --border:        #E0E0E0;
   --text-body:     #333333;
   --text-secondary:#666666;
   --text-heading:  #1A1A1A;
+  --text-muted:    #999999;
+  --text:          #1A1A1A;
   --nav-bg:        #000000;
+  --accent:        #2D4A8A;
+  --green:         #27AE60;
+  --orange:        #E67E22;
+  --mono:          "Consolas", "Menlo", monospace;
   --status-green:  #27AE60;
   --status-amber:  #F39C12;
   --status-red:    #E2001A;
