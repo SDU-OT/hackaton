@@ -671,12 +671,53 @@ select:focus {
   background: var(--white);
   border: 1.5px solid var(--border);
   padding: 10px 14px;
-  min-width: 160px;
+  width: 200px;
+  min-height: 72px;
   font-size: 12px;
   color: var(--text-body);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .bom-node.root { border-color: var(--red); border-width: 2px; }
+
+.node-id {
+  font-family: "Consolas", "Menlo", monospace;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.15;
+}
+
+.node-desc {
+  font-size: 11px;
+  line-height: 1.2;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.node-qty {
+  font-size: 10px;
+  color: var(--text-secondary);
+  line-height: 1.1;
+}
+
+.node-bars {
+  display: flex;
+  height: 5px;
+  border: 1px solid var(--border);
+  background: var(--bg-section);
+}
+
+.bar-machine {
+  background: #e8eef8;
+}
+
+.bar-labor {
+  background: #e8f4e8;
+}
 
 /* ── Recharts ────────────────────────────────────────────────────────────────── */
 

@@ -35,9 +35,13 @@ def get_children(material_id: str):
             b.unit,
             b.quantity,
             b.item_category,
-            EXISTS(SELECT 1 FROM bom sub WHERE sub.material = b.component LIMIT 1) AS has_children
+            EXISTS(SELECT 1 FROM bom sub WHERE sub.material = b.component LIMIT 1) AS has_children,
+            COALESCE(sa.scrap_rate_pct,  sa2.scrap_rate_pct)  AS scrap_rate_pct,
+            COALESCE(sa.total_scrap_cost, sa2.total_scrap_cost) AS total_scrap_cost
         FROM bom b
         LEFT JOIN material_master mm ON mm.material = b.component
+        LEFT JOIN scrap_agg sa   ON sa.material      = b.component
+        LEFT JOIN scrap_agg sa2  ON sa2.material_norm = LTRIM(b.component, '0') AND sa.material IS NULL
         WHERE b.material = ?
         ORDER BY b.component
     """, [resolved_id])
@@ -85,6 +89,8 @@ def explode(material_id: str, quantity: float, max_depth: int = 10):
                     "unit":              child["unit"] or "",
                     "qty_per_parent":    qty_per_parent,
                     "total_quantity":    total_quantity,
+                    "scrap_rate_pct":    None,
+                    "adjusted_total_quantity": total_quantity,
                     "depth":             next_depth,
                     "path_str":          " > ".join(row_path),
                     "total_machine_min": 0.0,
@@ -107,6 +113,7 @@ def explode(material_id: str, quantity: float, max_depth: int = 10):
     material_meta = _get_material_meta(component_ids)
     routing_map   = _get_routing_totals(component_ids)
     mrp_map       = _get_mrp_fallbacks(component_ids)
+    scrap_map     = _get_scrap_rates(component_ids)
 
     for it in items:
         meta = material_meta.get(it["component"])
@@ -119,6 +126,14 @@ def explode(material_id: str, quantity: float, max_depth: int = 10):
 
         if not (it.get("mrp_controller") or "").strip():
             it["mrp_controller"] = mrp_map.get(_norm(it["component"]))
+
+        scrap_pct = scrap_map.get(it["component"])
+        if scrap_pct is None:
+            scrap_pct = scrap_map.get(_norm(it["component"]))
+        it["scrap_rate_pct"] = scrap_pct
+
+        safe_scrap_pct = max(0.0, float(scrap_pct) if scrap_pct is not None else 0.0)
+        it["adjusted_total_quantity"] = it["total_quantity"] * (1.0 + safe_scrap_pct / 100.0)
 
         machine_per_unit, labor_per_unit = routing_map.get(it["component"], (0.0, 0.0))
         it["total_machine_min"] = machine_per_unit * it["total_quantity"]
@@ -240,6 +255,34 @@ def _get_routing_totals(materials):
     return out
 
 
+def _get_scrap_rates(materials):
+    """
+    Return {material_id: scrap_rate_pct} keyed by both raw and normalized IDs.
+    """
+    if not materials:
+        return {}
+
+    norms = sorted({_norm(m) for m in materials if m})
+    placeholders_raw  = ",".join(["?"] * len(materials))
+    placeholders_norm = ",".join(["?"] * len(norms))
+
+    rows = query(f"""
+        SELECT material, material_norm, scrap_rate_pct
+        FROM scrap_agg
+        WHERE material IN ({placeholders_raw})
+           OR material_norm IN ({placeholders_norm})
+    """, list(materials) + list(norms))
+
+    out = {}
+    for material, material_norm, scrap_rate_pct in rows:
+        rate = float(scrap_rate_pct) if scrap_rate_pct is not None else None
+        if material:
+            out[str(material)] = rate
+        if material_norm:
+            out[str(material_norm)] = rate
+    return out
+
+
 def _get_bom_children_for_parents(parents):
     out = defaultdict(list)
     parent_ids = sorted({(p or "").strip() for p in parents if (p or "").strip()})
@@ -321,13 +364,15 @@ def _chunked(values, size):
 
 def _row_to_bom_item(parent: str, r):
     return {
-        "parent":        parent,
-        "component":     str(r[0]) if r[0] is not None else "",
-        "description":   str(r[1]) if r[1] is not None else None,
-        "material_type": str(r[2]) if r[2] is not None else None,
-        "status":        str(r[3]) if r[3] is not None else None,
-        "unit":          str(r[4]) if r[4] is not None else "",
-        "quantity":      float(r[5]) if r[5] is not None else 0.0,
-        "item_category": str(r[6]) if r[6] is not None else "",
-        "has_children":  bool(r[7]),
+        "parent":          parent,
+        "component":       str(r[0])   if r[0] is not None else "",
+        "description":     str(r[1])   if r[1] is not None else None,
+        "material_type":   str(r[2])   if r[2] is not None else None,
+        "status":          str(r[3])   if r[3] is not None else None,
+        "unit":            str(r[4])   if r[4] is not None else "",
+        "quantity":        float(r[5]) if r[5] is not None else 0.0,
+        "item_category":   str(r[6])   if r[6] is not None else "",
+        "has_children":    bool(r[7]),
+        "scrap_rate_pct":  float(r[8]) if r[8] is not None else None,
+        "total_scrap_cost": float(r[9]) if r[9] is not None else None,
     }
