@@ -223,13 +223,26 @@ export const GET_DB_TABLES = gql`
 `;
 
 export const GET_TABLE_PREVIEW = gql`
-  query GetTablePreview($tableName: String!, $limit: Int, $offset: Int) {
-    tablePreview(tableName: $tableName, limit: $limit, offset: $offset) {
+  query GetTablePreview($tableName: String!, $limit: Int, $offset: Int, $search: String, $sortCol: String, $sortDir: String) {
+    tablePreview(tableName: $tableName, limit: $limit, offset: $offset, search: $search, sortCol: $sortCol, sortDir: $sortDir) {
       tableName
       columns
       rows
+      rowIds
       total
     }
+  }
+`;
+
+export const DELETE_TABLE_ROW = gql`
+  mutation DeleteTableRow($tableName: String!, $rowId: Int!) {
+    deleteTableRow(tableName: $tableName, rowId: $rowId)
+  }
+`;
+
+export const INSERT_TABLE_ROW = gql`
+  mutation InsertTableRow($tableName: String!, $valuesJson: String!) {
+    insertTableRow(tableName: $tableName, valuesJson: $valuesJson)
   }
 `;
 

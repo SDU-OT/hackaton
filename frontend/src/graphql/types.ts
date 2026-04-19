@@ -206,6 +206,7 @@ export interface TablePreview {
   tableName: string;
   columns: string[];
   rows: string[][];
+  rowIds: number[];
   total: number;
 }
 

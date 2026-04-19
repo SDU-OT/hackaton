@@ -646,7 +646,14 @@ def get_db_tables() -> list:
     return result
 
 
-def get_table_preview(table_name: str, limit: int = 100, offset: int = 0) -> dict:
+def get_table_preview(
+    table_name: str,
+    limit: int = 100,
+    offset: int = 0,
+    search: str = "",
+    sort_col: str = "",
+    sort_dir: str = "asc",
+) -> dict:
     if table_name not in ALL_MANAGED:
         raise ValueError(f"Table '{table_name}' is not accessible via preview.")
     col_rows = query(f"""
@@ -655,11 +662,68 @@ def get_table_preview(table_name: str, limit: int = 100, offset: int = 0) -> dic
         ORDER BY ordinal_position
     """, [table_name])
     columns = [str(r[0]) for r in col_rows]
-    total_rows = query(f'SELECT COUNT(*) FROM "{table_name}"')
+
+    # Build search WHERE clause (ILIKE across all columns)
+    search_clause = ""
+    search_params: list = []
+    if search and search.strip():
+        conditions = [f'CAST("{c}" AS VARCHAR) ILIKE ?' for c in columns]
+        search_clause = "WHERE " + " OR ".join(conditions)
+        search_params = [f"%{search.strip()}%"] * len(columns)
+
+    # Build sort clause
+    sort_clause = ""
+    if sort_col and sort_col in columns:
+        direction = "DESC" if sort_dir.lower() == "desc" else "ASC"
+        sort_clause = f'ORDER BY CAST("{sort_col}" AS VARCHAR) {direction} NULLS LAST'
+
+    total_rows = query(
+        f'SELECT COUNT(*) FROM "{table_name}" {search_clause}',
+        search_params,
+    )
     total = int(total_rows[0][0]) if total_rows else 0
-    rows = query(f'SELECT * FROM "{table_name}" LIMIT ? OFFSET ?', [limit, offset])
-    serialized = [[str(v) if v is not None else "" for v in row] for row in rows]
-    return {"table_name": table_name, "columns": columns, "rows": serialized, "total": total}
+
+    rows = query(
+        f'SELECT rowid, * FROM "{table_name}" {search_clause} {sort_clause} LIMIT ? OFFSET ?',
+        search_params + [limit, offset],
+    )
+    row_ids = [int(r[0]) for r in rows]
+    serialized = [[str(v) if v is not None else "" for v in row[1:]] for row in rows]
+    return {
+        "table_name": table_name,
+        "columns": columns,
+        "rows": serialized,
+        "row_ids": row_ids,
+        "total": total,
+    }
+
+
+def delete_table_row(table_name: str, row_id: int) -> bool:
+    if table_name not in USER_TABLES:
+        raise ValueError(f"Row deletion is only allowed for user tables: {sorted(USER_TABLES)}")
+    conn = get_conn()
+    with _lock:
+        conn.execute(f'DELETE FROM "{table_name}" WHERE rowid = ?', [row_id])
+        if table_name == "production_orders":
+            _materialize(conn)
+    return True
+
+
+def insert_table_row(table_name: str, values_json: str) -> bool:
+    import json
+    if table_name not in USER_TABLES:
+        raise ValueError(f"Row insertion is only allowed for user tables: {sorted(USER_TABLES)}")
+    conn = get_conn()
+    with _lock:
+        values = json.loads(values_json)
+        cols = _get_table_columns(conn, table_name)
+        params = [values.get(c) or None for c in cols]
+        col_list = ", ".join(f'"{c}"' for c in cols)
+        placeholders = ", ".join("?" for _ in cols)
+        conn.execute(f'INSERT INTO "{table_name}" ({col_list}) VALUES ({placeholders})', params)
+        if table_name == "production_orders":
+            _materialize(conn)
+    return True
 
 
 def _get_table_columns(conn, table_name: str) -> list:
