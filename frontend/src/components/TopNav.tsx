@@ -13,6 +13,12 @@ export default function TopNav() {
 
       <nav className="topnav-links">
         <NavLink
+          to="/mrp"
+          className={({ isActive }) => `topnav-link${isActive ? " active" : ""}`}
+        >
+          MRP
+        </NavLink>
+        <NavLink
           to="/materials"
           className={({ isActive }) => `topnav-link${isActive ? " active" : ""}`}
         >
