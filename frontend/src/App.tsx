@@ -8,6 +8,7 @@ import ProductionPlanner from "./pages/ProductionPlanner";
 import DatabaseBrowser from "./pages/DatabaseBrowser";
 import ScrapExplorer from "./pages/ScrapExplorer";
 import DataManagement from "./pages/DataManagement";
+import MRPView from "./pages/MRPView";
 
 export default function App() {
   return (
@@ -24,6 +25,7 @@ export default function App() {
           <Route path="/scrap"           element={<ScrapExplorer />} />
           <Route path="/db"              element={<DatabaseBrowser />} />
           <Route path="/data"            element={<DataManagement />} />
+          <Route path="/mrp"             element={<MRPView />} />
         </Routes>
       </main>
     </>

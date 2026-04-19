@@ -52,14 +52,13 @@ export default function Home() {
 
       <div className="home-grid-wrap">
         <div className="home-grid">
-          <div className="home-card disabled">
+          <Link to="/mrp" className="home-card">
             <IconFactory />
             <div>
               <p className="home-card-title">Your MRP</p>
-              <p className="home-card-desc">View and manage your MRP controller assignments and production planning parameters.</p>
+              <p className="home-card-desc">View production KPIs, scrap analysis, and AI-powered insights per MRP controller.</p>
             </div>
-            <span className="home-card-badge">Coming Soon</span>
-          </div>
+          </Link>
 
           <Link to="/materials" className="home-card">
             <IconLayers />

@@ -59,7 +59,7 @@ function fmt(n: number | null | undefined): string {
 
 function fmtCost(n: number | null | undefined): string {
   if (n == null) return "—";
-  return `€ ${n.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+  return `kr. ${n.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 }
 
 function fmtThroughput(n: number | null | undefined): string {

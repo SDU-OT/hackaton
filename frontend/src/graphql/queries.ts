@@ -316,6 +316,54 @@ export const MATERIAL_CATALOG = gql`
   }
 `;
 
+export const GET_MRP_CONTROLLERS = gql`
+  query GetMrpControllers {
+    mrpControllers
+  }
+`;
+
+export const GET_MRP_REPORT = gql`
+  query GetMrpReport($mrpController: String!, $dateFrom: String, $dateTo: String) {
+    mrpReport(mrpController: $mrpController, dateFrom: $dateFrom, dateTo: $dateTo) {
+      mrpController
+      hasProductionData
+      totalUnitsProduced
+      totalScrapUnits
+      scrapRatePct
+      totalScrapCost
+      timeSeries {
+        month
+        unitsProduced
+        scrapUnits
+        scrapRatePct
+      }
+      workCenterScrap {
+        workCenter
+        scrapCost
+        scrapUnits
+      }
+      topMaterialsByQty {
+        material
+        description
+        totalQty
+        scrapQty
+        scrapRatePct
+      }
+      topMaterialsByCost {
+        material
+        description
+        totalScrapCost
+        scrapUnits
+      }
+      clippyInsights {
+        type
+        message
+        severity
+      }
+    }
+  }
+`;
+
 export const GET_MATERIAL_SCRAP = gql`
   query GetMaterialScrap($materialId: String!) {
     materialScrap(materialId: $materialId) {

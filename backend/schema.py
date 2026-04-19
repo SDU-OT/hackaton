@@ -9,6 +9,7 @@ from resolvers import scrap as scrap_res
 from resolvers import dashboard as dash_res
 from resolvers import data_manager as dm_res
 from resolvers import material_catalog as mc_res
+from resolvers import mrp as mrp_res
 
 
 # ── Material catalog types ────────────────────────────────────────────────────
@@ -209,6 +210,62 @@ class SankeyLink:
 class ScrapSankeyData:
     nodes: List[SankeyNode]
     links: List[SankeyLink]
+
+
+# ── MRP dashboard types ───────────────────────────────────────────────────────
+
+@strawberry.type
+class MRPTimeSeriesPoint:
+    month: str
+    units_produced: float
+    scrap_units: float
+    scrap_rate_pct: float
+
+
+@strawberry.type
+class MRPWorkCenterScrap:
+    work_center: str
+    scrap_cost: float
+    scrap_units: int
+
+
+@strawberry.type
+class MRPMaterialUsage:
+    material: str
+    description: Optional[str]
+    total_qty: float
+    scrap_qty: float
+    scrap_rate_pct: float
+
+
+@strawberry.type
+class MRPMaterialCost:
+    material: str
+    description: Optional[str]
+    total_scrap_cost: float
+    scrap_units: int
+
+
+@strawberry.type
+class MRPClippyInsight:
+    type: str
+    message: str
+    severity: str
+
+
+@strawberry.type
+class MRPReport:
+    mrp_controller: str
+    has_production_data: bool
+    total_units_produced: float
+    total_scrap_units: float
+    scrap_rate_pct: float
+    total_scrap_cost: float
+    time_series: List[MRPTimeSeriesPoint]
+    work_center_scrap: List[MRPWorkCenterScrap]
+    top_materials_by_qty: List[MRPMaterialUsage]
+    top_materials_by_cost: List[MRPMaterialCost]
+    clippy_insights: List[MRPClippyInsight]
 
 
 # ── Database browser types ────────────────────────────────────────────────────
@@ -415,6 +472,27 @@ class Query:
         return ScrapSankeyData(
             nodes=[SankeyNode(**n) for n in d["nodes"]],
             links=[SankeyLink(**l) for l in d["links"]],
+        )
+
+    @strawberry.field
+    def mrp_controllers(self) -> List[str]:
+        return mrp_res.get_mrp_controllers()
+
+    @strawberry.field
+    def mrp_report(self, mrp_controller: str, date_from: str = "", date_to: str = "") -> MRPReport:
+        d = mrp_res.get_mrp_report(mrp_controller, date_from, date_to)
+        return MRPReport(
+            mrp_controller=d["mrp_controller"],
+            has_production_data=d["has_production_data"],
+            total_units_produced=d["total_units_produced"],
+            total_scrap_units=d["total_scrap_units"],
+            scrap_rate_pct=d["scrap_rate_pct"],
+            total_scrap_cost=d["total_scrap_cost"],
+            time_series=[MRPTimeSeriesPoint(**p) for p in d["time_series"]],
+            work_center_scrap=[MRPWorkCenterScrap(**w) for w in d["work_center_scrap"]],
+            top_materials_by_qty=[MRPMaterialUsage(**m) for m in d["top_materials_by_qty"]],
+            top_materials_by_cost=[MRPMaterialCost(**m) for m in d["top_materials_by_cost"]],
+            clippy_insights=[MRPClippyInsight(**i) for i in d["clippy_insights"]],
         )
 
     @strawberry.field

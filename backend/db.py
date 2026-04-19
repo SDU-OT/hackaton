@@ -19,6 +19,7 @@ BOM_CSV = _BOM_CLEAN if _is_lfs_pointer(_BOM_PRIMARY) else _BOM_PRIMARY
 MM_CSV   = os.path.join(CSV_DIR, "Material_Master_SRP100_1201.csv")
 ROU_CSV  = os.path.join(CSV_DIR, "Routing_SRP100_1201.csv")
 SCRAP_XL = os.path.join(CSV_DIR, "Scrap.xlsx")
+PROD_XL  = os.path.join(CSV_DIR, "Production orders 2025.xlsx")
 DB_PATH  = os.path.join(_BASE, "hackaton.db")
 
 # Set FORCE_RELOAD=1 to drop and reload all core tables from CSV on startup.
@@ -123,6 +124,9 @@ def _init(conn):
 
     # Always load Scrap.xlsx if available and scrap_records is empty
     _load_scrap_xlsx(conn)
+
+    # Always load Production orders xlsx if available and production_orders is empty
+    _load_production_orders_xlsx(conn)
 
     _materialize(conn)
 
@@ -467,6 +471,75 @@ def _load_scrap_xlsx(conn):
         print(f"    scrap_records: {n:,} rows loaded.")
     except Exception as e:
         print(f"  WARNING: Could not load Scrap.xlsx: {e}")
+
+
+def _load_production_orders_xlsx(conn):
+    """Load Production orders 2025.xlsx into production_orders. Skips if already populated."""
+    count = conn.execute("SELECT COUNT(*) FROM production_orders").fetchone()[0]
+    if count > 0:
+        print(f"  production_orders already populated ({count:,} rows), skipping.")
+        return
+    if not os.path.exists(PROD_XL):
+        print(f"  Production orders xlsx not found at {PROD_XL}, production_orders will be empty.")
+        return
+    try:
+        print(f"  Loading {PROD_XL}...")
+        df = pd.read_excel(PROD_XL, engine="openpyxl")
+
+        rename_map = {
+            "Material Number":          "material",
+            "Order quantity (GMEIN)":   "order_qty",
+            "Confirmed scrap (GMEIN)":  "scrap_qty",
+            "Quantity Delivered (GMEIN)": "delivered_qty",
+            "MRP controller":           "mrp_controller",
+            "Basic start date":         "start_date",
+            "Basic finish date":        "finish_date",
+            "Order Type":               "order_type",
+            "System Status":            "sys_status",
+            "Material description":     "mat_description",
+        }
+        df = df.rename(columns={k: v for k, v in rename_map.items() if k in df.columns})
+        schema_cols = ["material", "order_qty", "scrap_qty", "delivered_qty",
+                       "mrp_controller", "start_date", "finish_date",
+                       "order_type", "sys_status", "mat_description"]
+        for col in schema_cols:
+            if col not in df.columns:
+                df[col] = None
+
+        df = df[schema_cols].copy()
+
+        # Normalise material ID: strip leading zeros
+        df["material"] = df["material"].astype(str).str.strip().str.lstrip("0")
+        df.loc[df["material"] == "", "material"] = "0"
+
+        # Coerce numeric columns
+        for col in ["order_qty", "scrap_qty", "delivered_qty"]:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+
+        # Convert date columns to ISO strings
+        for col in ["start_date", "finish_date"]:
+            df[col] = pd.to_datetime(df[col], errors="coerce").dt.strftime("%Y-%m-%d")
+
+        df = df[df["order_qty"].notna() & (df["order_qty"] > 0)]
+
+        conn.execute("DELETE FROM production_orders")
+        conn.register("_prod_raw", df)
+        conn.execute("""
+            INSERT INTO production_orders
+            SELECT material, order_qty, scrap_qty, delivered_qty,
+                   mrp_controller, start_date, finish_date,
+                   order_type, sys_status, mat_description
+            FROM _prod_raw
+            WHERE material IS NOT NULL AND material != ''
+        """)
+        n = conn.execute("SELECT COUNT(*) FROM production_orders").fetchone()[0]
+        conn.execute("""
+            INSERT OR REPLACE INTO imported_datasets(name, source_file, table_name, row_count, imported_at)
+            VALUES ('production_orders_auto', 'Production orders 2025.xlsx', 'production_orders', ?, NOW())
+        """, [n])
+        print(f"    production_orders: {n:,} rows loaded.")
+    except Exception as e:
+        print(f"  WARNING: Could not load Production orders xlsx: {e}")
 
 
 def _strip_d_bracket(col: str) -> str:

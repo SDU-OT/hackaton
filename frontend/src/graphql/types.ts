@@ -199,3 +199,51 @@ export interface ImportResult {
   tableName: string;
   rowCount: number;
 }
+
+export interface MRPTimeSeriesPoint {
+  month: string;
+  unitsProduced: number;
+  scrapUnits: number;
+  scrapRatePct: number;
+}
+
+export interface MRPWorkCenterScrap {
+  workCenter: string;
+  scrapCost: number;
+  scrapUnits: number;
+}
+
+export interface MRPMaterialUsage {
+  material: string;
+  description?: string | null;
+  totalQty: number;
+  scrapQty: number;
+  scrapRatePct: number;
+}
+
+export interface MRPMaterialCost {
+  material: string;
+  description?: string | null;
+  totalScrapCost: number;
+  scrapUnits: number;
+}
+
+export interface MRPClippyInsight {
+  type: string;
+  message: string;
+  severity: string;
+}
+
+export interface MRPReport {
+  mrpController: string;
+  hasProductionData: boolean;
+  totalUnitsProduced: number;
+  totalScrapUnits: number;
+  scrapRatePct: number;
+  totalScrapCost: number;
+  timeSeries: MRPTimeSeriesPoint[];
+  workCenterScrap: MRPWorkCenterScrap[];
+  topMaterialsByQty: MRPMaterialUsage[];
+  topMaterialsByCost: MRPMaterialCost[];
+  clippyInsights: MRPClippyInsight[];
+}
