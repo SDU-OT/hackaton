@@ -29,13 +29,14 @@ def get_material_catalog(
     use_date_filter = bool(date_from or date_to)
     order_col = _SORTABLE.get(sort_by, "mm.material")
     order_dir = "DESC" if sort_dir.lower() == "desc" else "ASC"
+    type_filter = (material_type or "").strip()
 
     # WHERE clauses applied to material_master
     where_clauses = ["(mm.material ILIKE ? OR mm.description ILIKE ?)"]
     where_params: list = [pattern, pattern]
-    if material_type:
+    if type_filter:
         where_clauses.append("mm.material_type = ?")
-        where_params.append(material_type)
+        where_params.append(type_filter)
     if mrp_controller:
         where_clauses.append("mm.mrp_controller = ?")
         where_params.append(mrp_controller)

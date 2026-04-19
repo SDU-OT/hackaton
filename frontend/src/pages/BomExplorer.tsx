@@ -10,7 +10,6 @@ import ReactFlow, {
   MiniMap,
   Position,
   MarkerType,
-  getSmoothStepPath,
   type Node,
   type Edge,
   type EdgeProps,
@@ -20,18 +19,21 @@ import { GET_BOM_EXPLOSION, GET_MATERIAL, GET_SCRAP_CHAIN } from "../graphql/que
 import type { BomExplosionItem, ScrapChainItem } from "../graphql/types";
 import TypeBadge from "../components/TypeBadge";
 
-const NODE_W = 200;
-const NODE_H = 72;
-const GROUP_PAD_X = 40;
-const GROUP_PAD_TOP = 38;
-const GROUP_PAD_BOTTOM = 24;
-const GROUP_COLUMN_GAP = 120;
-const LEVEL_ROW_GAP = 60;
-const LEVEL_NODE_GAP = 40;
-const MAX_NODES = 600;
-const BUS_H = 12;
-const ROOT_TO_BUS_GAP = 80;
-const BUS_TO_MATERIAL_GAP = 56;
+// ── Layout constants ──────────────────────────────────────────────────────────
+
+const NODE_W              = 200;
+const NODE_H              = 72;
+const GROUP_PAD_X         = 32;
+const GROUP_PAD_TOP       = 29;
+const GROUP_PAD_BOTTOM    = GROUP_PAD_TOP + Math.round(NODE_H * 0.40);
+const GROUP_COLUMN_GAP    = 200;
+const LEVEL_ROW_GAP       = 180;
+const LEVEL_NODE_GAP      = 60;
+const MAX_NODES           = 600;
+const ROOT_TO_BUS_GAP     = 200;
+const BUS_TO_MATERIAL_GAP = 102;
+
+// ── Utilities ─────────────────────────────────────────────────────────────────
 
 function formatMin(min: number | null | undefined) {
   if (!min || min === 0) return "—";
@@ -47,13 +49,21 @@ function getMrpLabel(value: unknown) {
 function getColorForGroup(index: number) {
   const hue = (index * 61) % 360;
   return {
-    accent: `hsl(${hue}, 78%, 56%)`,
-    border: `hsla(${hue}, 80%, 56%, 0.52)`,
-    fill: `hsla(${hue}, 85%, 54%, 0.12)`,
-    inset: `hsla(${hue}, 88%, 58%, 0.26)`,
+    accent:   `hsl(${hue}, 78%, 56%)`,
+    border:   `hsla(${hue}, 80%, 56%, 0.52)`,
+    fill:     `hsla(${hue}, 85%, 54%, 0.12)`,
+    inset:    `hsla(${hue}, 88%, 58%, 0.26)`,
     chipFill: `hsla(${hue}, 85%, 54%, 0.2)`,
   };
 }
+
+// Orthogonal path: only horizontal + vertical segments, one 90-degree bend at midY
+function orthogonalPath(sx: number, sy: number, tx: number, ty: number): string {
+  const midY = (sy + ty) / 2;
+  return `M ${sx} ${sy} L ${sx} ${midY} L ${tx} ${midY} L ${tx} ${ty}`;
+}
+
+// ── Node components ───────────────────────────────────────────────────────────
 
 function BomNodeComponent({ data }: { data: Record<string, unknown> }) {
   const totalMachine = data.totalMachineMin as number;
@@ -64,9 +74,14 @@ function BomNodeComponent({ data }: { data: Record<string, unknown> }) {
   const mrpColor     = typeof data.mrpColor === "string" ? data.mrpColor : "";
   const dimmed       = Boolean(data.dimmed);
   const requiredQty  = Number(data.requiredQty ?? 0);
+  const actualRequiredQty = Number(data.actualRequiredQty ?? requiredQty);
   const requiredUnit = String(data.requiredUnit ?? "").trim();
+  const scrapRatePct = Number(data.scrapRatePct ?? 0);
   const requiredText = Number.isFinite(requiredQty)
     ? requiredQty.toFixed(requiredQty % 1 === 0 ? 0 : 3)
+    : "0";
+  const actualRequiredText = Number.isFinite(actualRequiredQty)
+    ? actualRequiredQty.toFixed(actualRequiredQty % 1 === 0 ? 0 : 3)
     : "0";
   const colorStyle = !data.isRoot && mrpColor
     ? {
@@ -80,6 +95,8 @@ function BomNodeComponent({ data }: { data: Record<string, unknown> }) {
     <div
       className={`bom-node${data.isRoot ? " root" : ""}${selected ? " selected" : ""}`}
       style={{
+        width: NODE_W,
+        minHeight: NODE_H,
         fontSize: ".72rem",
         ...colorStyle,
         opacity: dimmed ? 0.28 : 1,
@@ -89,14 +106,20 @@ function BomNodeComponent({ data }: { data: Record<string, unknown> }) {
         outlineOffset: selected ? 2 : undefined,
       }}
     >
-      <Handle type="target" position={Position.Top} className="bom-handle" />
+      <Handle type="target" position={Position.Top}    className="bom-handle" />
       <div className="node-id">{data.label as string}</div>
       <div className="node-desc" title={data.description as string}>
         {data.description as string || "-"}
       </div>
       {requiredQty > 0 && (
         <div className="node-qty" title="Total required quantity for this BOM explosion">
-          Quantity : {requiredText} {requiredUnit}
+          Ideal Quantity : {requiredText} {requiredUnit}
+        </div>
+      )}
+      {actualRequiredQty > 0 && (
+        <div className="node-qty" title="Scrap-adjusted production quantity needed" style={{ color: "var(--red)", fontWeight: 600 }}>
+          Actual Quantity : {actualRequiredText} {requiredUnit}
+          {scrapRatePct > 0 ? ` (${scrapRatePct.toFixed(1)}% scrap)` : ""}
         </div>
       )}
       {!!data.materialType && (
@@ -117,60 +140,68 @@ function BomNodeComponent({ data }: { data: Record<string, unknown> }) {
 
 function MrpGroupNodeComponent({ data }: { data: Record<string, unknown> }) {
   const metaText = data.metaText != null ? String(data.metaText) : `${String(data.count ?? 0)} materials`;
-  const accent = typeof data.groupAccent === "string" ? data.groupAccent : "#93c5fd";
+  const accent = typeof data.groupAccent      === "string" ? data.groupAccent      : "#93c5fd";
   const border = typeof data.groupBorderColor === "string" ? data.groupBorderColor : "rgba(147,197,253,.4)";
-  const fill = typeof data.groupFill === "string" ? data.groupFill : "transparent";
-  const inset = typeof data.groupInset === "string" ? data.groupInset : "none";
+  const fill   = typeof data.groupFill        === "string" ? data.groupFill        : "transparent";
+  const inset  = typeof data.groupInset       === "string" ? data.groupInset       : "none";
 
   return (
     <div
       className="mrp-group-node"
       style={{
-        color: accent,
-        borderColor: border,
+        width: "100%",
+        height: "100%",
+        border: `1.5px solid ${border}`,
+        borderRadius: 14,
         background: fill,
         boxShadow: inset,
         opacity: Boolean(data.dimmed) ? 0.28 : 1,
         filter: Boolean(data.dimmed) ? "saturate(0.22)" : "none",
         transition: "opacity .15s ease, filter .15s ease",
+        position: "relative",
       }}
     >
-      <div className="mrp-group-title">MRP {String(data.label ?? "")}</div>
-      <div className="mrp-group-meta">{metaText}</div>
+      <div style={{
+        position: "absolute", top: 8, right: 12,
+        fontSize: ".7rem", fontWeight: 700, color: accent, letterSpacing: ".06em",
+        textTransform: "uppercase", lineHeight: 1,
+      }}>
+        MRP {String(data.label ?? "")}
+      </div>
+      <div style={{
+        position: "absolute", top: 22, right: 12,
+        fontSize: ".65rem", color: accent, opacity: 0.7,
+      }}>
+        {metaText}
+      </div>
     </div>
   );
 }
 
-function MrpBusNodeComponent({ data }: { data: Record<string, unknown> }) {
-  const accent = typeof data.accent === "string" ? data.accent : "#93c5fd";
-  const dimmed  = Boolean(data.dimmed);
+// Depth-level dotted separator — a thin dashed horizontal line inside an MRP group
+function DepthSeparatorComponent() {
   return (
     <div
-      className="mrp-bus-node"
       style={{
-        background: accent,
-        opacity: dimmed ? 0.22 : 1,
-        filter: dimmed ? "saturate(0.22)" : "none",
-        transition: "opacity .15s ease, filter .15s ease",
+        width: "100%",
+        height: "100%",
+        borderTop: "1px dashed rgba(147,197,253,0.25)",
+        pointerEvents: "none",
       }}
-    >
-      <Handle type="target" position={Position.Top}    className="bom-handle" style={{ background: accent }} />
-      <Handle type="source" position={Position.Bottom} className="bom-handle" style={{ background: accent }} />
-    </div>
+    />
   );
 }
+
+// ── Edge component ────────────────────────────────────────────────────────────
 
 function BomEdge({
   id, sourceX, sourceY, targetX, targetY,
-  sourcePosition, targetPosition, markerEnd, style, label,
+  markerEnd, style, label,
 }: EdgeProps) {
   const edgeLabel = String(label ?? "").trim();
-  const [edgePath, labelX, labelY] = getSmoothStepPath({
-    sourceX, sourceY, targetX, targetY,
-    sourcePosition, targetPosition,
-    borderRadius: 8,
-    offset: 30,
-  });
+  const edgePath  = orthogonalPath(sourceX, sourceY, targetX, targetY);
+  const labelX    = (sourceX + targetX) / 2;
+  const labelY    = (sourceY + targetY) / 2;
 
   return (
     <>
@@ -189,8 +220,14 @@ function BomEdge({
   );
 }
 
-const nodeTypes = { bomNode: BomNodeComponent, mrpGroup: MrpGroupNodeComponent, mrpBus: MrpBusNodeComponent };
+const nodeTypes = {
+  bomNode:        BomNodeComponent,
+  mrpGroup:       MrpGroupNodeComponent,
+  depthSeparator: DepthSeparatorComponent,
+};
 const edgeTypes = { bomEdge: BomEdge };
+
+// ── Side-panel types ──────────────────────────────────────────────────────────
 
 interface SelectedNodeData {
   id: string;
@@ -198,18 +235,15 @@ interface SelectedNodeData {
   materialType: string | null;
   mrpController: string | null;
   requiredQty: number;
+  actualRequiredQty: number;
+  scrapRatePct: number;
   requiredUnit: string;
   totalMachineMin: number;
   totalLaborMin: number;
-  qtyPerParent?: number;
 }
 
 function NodeDetailPanel({
-  node,
-  items,
-  onClose,
-  onNavigate,
-  onViewScrap,
+  node, items, onClose, onNavigate, onViewScrap,
 }: {
   node: SelectedNodeData;
   items: BomExplosionItem[];
@@ -217,29 +251,19 @@ function NodeDetailPanel({
   onNavigate: () => void;
   onViewScrap: () => void;
 }) {
-  // Find this node in the explosion to get per-unit times
   const itemData = items.find((i) => i.component === node.id);
   const perUnitMachine = itemData && itemData.totalQuantity > 0
-    ? itemData.totalMachineMin / itemData.totalQuantity
-    : 0;
+    ? itemData.totalMachineMin / itemData.totalQuantity : 0;
   const perUnitLabor = itemData && itemData.totalQuantity > 0
-    ? itemData.totalLaborMin / itemData.totalQuantity
-    : 0;
+    ? itemData.totalLaborMin / itemData.totalQuantity : 0;
 
   return (
     <div
       style={{
-        position: "absolute",
-        top: 12,
-        right: 12,
-        width: 280,
-        zIndex: 100,
-        background: "var(--surface)",
-        border: "1px solid var(--border)",
-        borderRadius: 10,
-        padding: "1rem",
-        boxShadow: "0 8px 32px rgba(0,0,0,.4)",
-        fontSize: ".82rem",
+        position: "absolute", top: 12, right: 12, width: 280, zIndex: 100,
+        background: "var(--white)", border: "1px solid var(--border)",
+        borderRadius: 10, padding: "1rem",
+        boxShadow: "0 8px 32px rgba(0,0,0,.4)", fontSize: ".82rem",
       }}
     >
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: ".7rem" }}>
@@ -247,12 +271,7 @@ function NodeDetailPanel({
           <div style={{ fontFamily: "var(--mono)", fontWeight: 700, fontSize: ".9rem" }}>{node.id}</div>
           <div style={{ color: "var(--text-muted)", marginTop: ".2rem" }}>{node.description ?? "—"}</div>
         </div>
-        <button
-          onClick={onClose}
-          style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: "1.1rem", lineHeight: 1 }}
-        >
-          ×
-        </button>
+        <button onClick={onClose} style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: "1.1rem", lineHeight: 1 }}>×</button>
       </div>
 
       {node.materialType && (
@@ -260,8 +279,10 @@ function NodeDetailPanel({
       )}
 
       <div style={{ display: "grid", gap: ".4rem", marginBottom: ".8rem" }}>
-        <Row label="MRP Controller" value={node.mrpController ?? "—"} />
-        <Row label="Total qty (this explosion)" value={`${node.requiredQty.toFixed(node.requiredQty % 1 === 0 ? 0 : 4)} ${node.requiredUnit}`} />
+        <Row label="MRP Controller"              value={node.mrpController ?? "—"} />
+        <Row label="Ideal Quantity"              value={`${node.requiredQty.toFixed(node.requiredQty % 1 === 0 ? 0 : 4)} ${node.requiredUnit}`} />
+        <Row label="Scrap rate"                  value={`${node.scrapRatePct.toFixed(2)}%`} />
+        <Row label="Actual Quantity"             value={`${node.actualRequiredQty.toFixed(node.actualRequiredQty % 1 === 0 ? 0 : 4)} ${node.requiredUnit}`} strong valueColor="var(--red)" />
       </div>
 
       <div style={{ borderTop: "1px solid var(--border)", paddingTop: ".6rem", marginBottom: ".8rem" }}>
@@ -269,51 +290,53 @@ function NodeDetailPanel({
           Routing time
         </div>
         <div style={{ display: "grid", gap: ".3rem" }}>
-          <Row label="Machine / unit" value={formatMin(perUnitMachine)} accent />
-          <Row label="Machine × qty" value={formatMin(node.totalMachineMin)} accent />
-          <Row label="Labor / unit" value={formatMin(perUnitLabor)} />
-          <Row label="Labor × qty" value={formatMin(node.totalLaborMin)} />
-          <Row
-            label="Total (machine + labor)"
-            value={formatMin(node.totalMachineMin + node.totalLaborMin)}
-            strong
-          />
+          <Row label="Machine / unit"        value={formatMin(perUnitMachine)} accent />
+          <Row label="Machine × qty"         value={formatMin(node.totalMachineMin)} accent />
+          <Row label="Labor / unit"          value={formatMin(perUnitLabor)} />
+          <Row label="Labor × qty"           value={formatMin(node.totalLaborMin)} />
+          <Row label="Total (machine+labor)" value={formatMin(node.totalMachineMin + node.totalLaborMin)} strong />
         </div>
       </div>
 
       <div style={{ display: "flex", gap: ".5rem", flexWrap: "wrap" }}>
-        <button className="btn btn-ghost" style={{ fontSize: ".78rem" }} onClick={onNavigate}>
-          Material detail →
-        </button>
-        <button className="btn btn-ghost" style={{ fontSize: ".78rem" }} onClick={onViewScrap}>
-          Scrap chain →
-        </button>
+        <button className="btn btn-ghost" style={{ fontSize: ".78rem" }} onClick={onNavigate}>Material detail →</button>
+        <button className="btn btn-ghost" style={{ fontSize: ".78rem" }} onClick={onViewScrap}>Scrap chain →</button>
       </div>
     </div>
   );
 }
 
-function Row({ label, value, accent, strong }: { label: string; value: string; accent?: boolean; strong?: boolean }) {
+function Row({
+  label,
+  value,
+  accent,
+  strong,
+  valueColor,
+}: {
+  label: string;
+  value: string;
+  accent?: boolean;
+  strong?: boolean;
+  valueColor?: string;
+}) {
   return (
     <div style={{ display: "flex", justifyContent: "space-between", gap: ".5rem" }}>
       <span style={{ color: "var(--text-muted)" }}>{label}</span>
-      <span style={{ fontFamily: "var(--mono)", fontWeight: strong ? 700 : undefined, color: accent ? "var(--accent)" : "var(--text)" }}>
+      <span
+        style={{
+          fontFamily: "var(--mono)",
+          fontWeight: strong ? 700 : undefined,
+          color: valueColor ?? (accent ? "var(--accent)" : "var(--text)"),
+        }}
+      >
         {value}
       </span>
     </div>
   );
 }
 
-function ScrapChainPanel({
-  materialId,
-  onClose,
-}: {
-  materialId: string;
-  onClose: () => void;
-}) {
-  const { data, loading } = useQuery<{ scrapChain: ScrapChainItem[] }>(GET_SCRAP_CHAIN, {
-    variables: { materialId },
-  });
+function ScrapChainPanel({ materialId, onClose }: { materialId: string; onClose: () => void }) {
+  const { data, loading } = useQuery<{ scrapChain: ScrapChainItem[] }>(GET_SCRAP_CHAIN, { variables: { materialId } });
   const chain = data?.scrapChain ?? [];
 
   return (
@@ -361,13 +384,15 @@ function ScrapChainPanel({
   );
 }
 
+// ── Main component ────────────────────────────────────────────────────────────
+
 export default function BomExplorer() {
   const { id: paramId } = useParams<{ id?: string }>();
   const navigate = useNavigate();
-  const [searchId, setSearchId] = useState(paramId ?? "");
-  const [committed, setCommitted] = useState(paramId ?? "");
-  const [depth, setDepth] = useState(5);
-  const [viewMode, setViewMode] = useState<"graph" | "table">("graph");
+  const [searchId,    setSearchId]    = useState(paramId ?? "");
+  const [committed,   setCommitted]   = useState(paramId ?? "");
+  const [depth,       setDepth]       = useState(5);
+  const [viewMode,    setViewMode]    = useState<"graph" | "table">("graph");
   const [inactiveMrps, setInactiveMrps] = useState<string[]>([]);
   const [selectedNode, setSelectedNode] = useState<SelectedNodeData | null>(null);
   const [scrapChainFor, setScrapChainFor] = useState<string | null>(null);
@@ -381,20 +406,13 @@ export default function BomExplorer() {
   const rootMaterialId = items[0]?.parent ?? committed;
 
   const { data: rootMaterialData } = useQuery<{
-    material: {
-      mrpController?: string | null;
-      materialType?: string | null;
-      description?: string | null;
-    } | null;
-  }>(GET_MATERIAL, {
-    variables: { materialId: rootMaterialId },
-    skip: !rootMaterialId,
-  });
+    material: { mrpController?: string | null; materialType?: string | null; description?: string | null } | null;
+  }>(GET_MATERIAL, { variables: { materialId: rootMaterialId }, skip: !rootMaterialId });
 
-  const rootMrpController = rootMaterialData?.material?.mrpController;
-  const rootMaterialType = rootMaterialData?.material?.materialType ?? null;
+  const rootMrpController       = rootMaterialData?.material?.mrpController;
+  const rootMaterialType        = rootMaterialData?.material?.materialType ?? null;
   const rootMaterialDescription = rootMaterialData?.material?.description?.trim() || "—";
-  const rootMrpLabel = getMrpLabel(rootMrpController);
+  const rootMrpLabel            = getMrpLabel(rootMrpController);
 
   useEffect(() => {
     const next = (paramId ?? "").trim();
@@ -409,7 +427,7 @@ export default function BomExplorer() {
     if (!items.length || !committed) return { nodes: [], edges: [], tooLarge: false, mrpLegend: [] };
 
     const effectiveRootId = items[0]?.parent ?? committed;
-    const nodeMap = new Map<string, Node>();
+    const nodeMap  = new Map<string, Node>();
     const edgeSeen = new Set<string>();
     const edgeList: Edge[] = [];
 
@@ -419,13 +437,14 @@ export default function BomExplorer() {
       data: {
         label: effectiveRootId, isRoot: true, mrpController: rootMrpLabel,
         materialType: rootMaterialType, requiredQty: 1, requiredUnit: "PC",
+        actualRequiredQty: 1, scrapRatePct: 0,
         totalMachineMin: 0, totalLaborMin: 0,
         selected: selectedNode?.id === effectiveRootId,
       },
       position: { x: 0, y: 0 }, zIndex: 2,
     });
 
-    // Build material nodes (aggregate quantities across paths — no edges here)
+    // Accumulate component nodes (aggregate quantities across BOM paths)
     for (const item of items) {
       const existingNode = nodeMap.get(item.component);
       if (!existingNode) {
@@ -436,6 +455,8 @@ export default function BomExplorer() {
             materialType: item.materialType, mrpController: item.mrpController,
             depth: item.depth, isRoot: false,
             requiredQty: item.totalQuantity, requiredUnit: item.unit,
+            actualRequiredQty: item.adjustedTotalQuantity,
+            scrapRatePct: Number(item.scrapRatePct ?? 0),
             totalMachineMin: item.totalMachineMin, totalLaborMin: item.totalLaborMin,
             selected: selectedNode?.id === item.component,
           },
@@ -443,28 +464,31 @@ export default function BomExplorer() {
         });
       } else {
         const currentData = existingNode.data as Record<string, unknown>;
-        const prevQty  = Number(currentData.requiredQty ?? 0);
-        const prevUnit = String(currentData.requiredUnit ?? "").trim();
+        const prevQty     = Number(currentData.requiredQty ?? 0);
+        const prevUnit    = String(currentData.requiredUnit ?? "").trim();
         const nextUnitRaw = String(item.unit ?? "").trim();
-        const nextUnit = prevUnit && nextUnitRaw && prevUnit !== nextUnitRaw
+        const nextUnit    = prevUnit && nextUnitRaw && prevUnit !== nextUnitRaw
           ? "mixed" : (prevUnit || nextUnitRaw);
         existingNode.data = {
           ...currentData,
           requiredQty:     (Number.isFinite(prevQty) ? prevQty : 0) + item.totalQuantity,
           requiredUnit:    nextUnit,
+          actualRequiredQty: Number(currentData.actualRequiredQty ?? 0) + item.adjustedTotalQuantity,
+          scrapRatePct: Number(currentData.scrapRatePct ?? item.scrapRatePct ?? 0),
           totalMachineMin: Number(currentData.totalMachineMin ?? 0) + item.totalMachineMin,
-          totalLaborMin:   Number(currentData.totalLaborMin ?? 0)   + item.totalLaborMin,
+          totalLaborMin:   Number(currentData.totalLaborMin   ?? 0) + item.totalLaborMin,
           selected:        selectedNode?.id === item.component,
         };
       }
     }
 
-    const tooLarge = nodeMap.size > MAX_NODES;
-    const nodeArr  = Array.from(nodeMap.values()).slice(0, MAX_NODES);
-    const rootNode = nodeArr.find((node) => node.data?.isRoot);
-    const nonRootNodes = nodeArr.filter((node) => !node.data?.isRoot);
+    const tooLarge   = nodeMap.size > MAX_NODES;
+    const nodeArr    = Array.from(nodeMap.values()).slice(0, MAX_NODES);
+    const visibleIds = new Set(nodeArr.map((n) => n.id));
+    const rootNode   = nodeArr.find((n) => n.data?.isRoot);
+    const nonRootNodes = nodeArr.filter((n) => !n.data?.isRoot);
 
-    // Color map
+    // Group non-root nodes by MRP
     const groupBuckets = new Map<string, Node[]>();
     for (const node of nonRootNodes) {
       const mrp = getMrpLabel(node.data?.mrpController);
@@ -472,40 +496,36 @@ export default function BomExplorer() {
       groupBuckets.get(mrp)!.push(node);
     }
 
-    const groupNodes: Node[] = [];
     const sortedGroups = Array.from(groupBuckets.entries()).sort((a, b) => a[0].localeCompare(b[0]));
 
-    const allLabels = Array.from(new Set([...sortedGroups.map(([label]) => label), rootMrpLabel]))
-      .sort((a, b) => a.localeCompare(b));
+    // Assign colors
+    const allLabels = Array.from(new Set([...sortedGroups.map(([l]) => l), rootMrpLabel])).sort();
     const colorByLabel = new Map<string, ReturnType<typeof getColorForGroup>>();
-    for (let i = 0; i < allLabels.length; i += 1) {
-      colorByLabel.set(allLabels[i], getColorForGroup(i));
-    }
+    for (let i = 0; i < allLabels.length; i++) colorByLabel.set(allLabels[i], getColorForGroup(i));
 
     const legendCounts = new Map<string, number>();
-    for (const [label, nodesInGroup] of sortedGroups) {
-      legendCounts.set(label, nodesInGroup.length);
-    }
+    for (const [label, nodesInGroup] of sortedGroups) legendCounts.set(label, nodesInGroup.length);
     legendCounts.set(rootMrpLabel, (legendCounts.get(rootMrpLabel) ?? 0) + 1);
 
-    // Position nodes, create bus nodes, and build edges
-    let cursorX = 0;
-    const busY       = ROOT_TO_BUS_GAP;
-    const levelBaseY = ROOT_TO_BUS_GAP + BUS_H + BUS_TO_MATERIAL_GAP;
+    // Position nodes and build structural nodes/edges
+    const groupNodes: Node[] = [];
+    let cursorX    = 0;
+    const levelBaseY = ROOT_TO_BUS_GAP + BUS_TO_MATERIAL_GAP;
 
-    for (let index = 0; index < sortedGroups.length; index += 1) {
+    for (let index = 0; index < sortedGroups.length; index++) {
       const [mrp, groupNodesRaw] = sortedGroups[index];
       if (!groupNodesRaw.length) continue;
 
       const colors  = colorByLabel.get(mrp) ?? getColorForGroup(index);
       const isMuted = inactiveMrps.includes(mrp);
 
+      // Bucket by depth
       const depthBuckets = new Map<number, Node[]>();
       for (const node of groupNodesRaw) {
-        const nodeDepth = Number(node.data?.depth ?? 1);
-        const d = Number.isFinite(nodeDepth) && nodeDepth > 0 ? nodeDepth : 1;
-        if (!depthBuckets.has(d)) depthBuckets.set(d, []);
-        depthBuckets.get(d)!.push(node);
+        const nd = Number.isFinite(Number(node.data?.depth)) && Number(node.data?.depth) > 0
+          ? Number(node.data?.depth) : 1;
+        if (!depthBuckets.has(nd)) depthBuckets.set(nd, []);
+        depthBuckets.get(nd)!.push(node);
       }
 
       const sortedDepths = Array.from(depthBuckets.keys()).sort((a, b) => a - b);
@@ -521,43 +541,41 @@ export default function BomExplorer() {
 
       // Position material nodes
       for (const d of sortedDepths) {
-        const rowY = levelBaseY + (d - 1) * (NODE_H + LEVEL_ROW_GAP);
+        const rowY     = levelBaseY + (d - 1) * (NODE_H + LEVEL_ROW_GAP);
         const rowNodes = depthBuckets.get(d)!;
-        for (let col = 0; col < rowNodes.length; col += 1) {
-          const node = rowNodes[col];
-          node.position = { x: groupLeft + col * (NODE_W + LEVEL_NODE_GAP), y: rowY };
-          node.data = { ...node.data, mrpColor: colors.accent, dimmed: isMuted };
+        const rowWidth = rowNodes.length * NODE_W + (rowNodes.length - 1) * LEVEL_NODE_GAP;
+        const rowOffset = (groupContentWidth - rowWidth) / 2;
+        for (let col = 0; col < rowNodes.length; col++) {
+          rowNodes[col].position = {
+            x: groupLeft + rowOffset + col * (NODE_W + LEVEL_NODE_GAP),
+            y: rowY,
+          };
+          rowNodes[col].data = { ...rowNodes[col].data, mrpColor: colors.accent, dimmed: isMuted };
         }
       }
 
-      // Bus node spans the group content width
-      const busId = `bus:${mrp}`;
-      groupNodes.push({
-        id: busId, type: "mrpBus",
-        position: { x: groupLeft, y: busY },
-        data: { label: mrp, accent: colors.accent, dimmed: isMuted },
-        draggable: false, selectable: false, connectable: false, focusable: false,
-        zIndex: 2,
-        style: { width: groupContentWidth, height: BUS_H },
-      });
-
-      // Bus → material edges (all materials in this MRP group)
-      for (const node of groupNodesRaw) {
-        const edgeKey = `${busId}->${node.id}`;
-        if (!edgeSeen.has(edgeKey)) {
-          edgeSeen.add(edgeKey);
-          edgeList.push({
-            id: edgeKey, source: busId, target: node.id, type: "bomEdge",
-            data: { edgeType: "bus-material", mrp, isMuted },
-          });
-        }
+      // Depth-level dotted separators between adjacent depth rows
+      for (let di = 0; di < sortedDepths.length - 1; di++) {
+        const currentD = sortedDepths[di];
+        const rowEndY  = levelBaseY + (currentD - 1) * (NODE_H + LEVEL_ROW_GAP) + NODE_H;
+        const sepY     = rowEndY + LEVEL_ROW_GAP / 2 - 1;
+        groupNodes.push({
+          id: `sep:${mrp}:d${currentD}`,
+          type: "depthSeparator",
+          position: { x: groupLeft - GROUP_PAD_X, y: sepY },
+          data: {},
+          draggable: false, selectable: false, connectable: false, focusable: false,
+          zIndex: 1,
+          style: { width: groupContentWidth + GROUP_PAD_X * 2, height: 2 },
+        });
       }
 
-      // MRP group container — spans from above bus down to last material row
+      // MRP group container
+      const minY = Math.min(...groupNodesRaw.map((n) => n.position.y));
       const maxY = Math.max(...groupNodesRaw.map((n) => n.position.y + NODE_H));
       groupNodes.push({
         id: `mrp:${mrp}`, type: "mrpGroup",
-        position: { x: groupLeft - GROUP_PAD_X, y: busY - GROUP_PAD_TOP },
+        position: { x: groupLeft - GROUP_PAD_X, y: minY - GROUP_PAD_TOP },
         data: {
           label: mrp, count: groupNodesRaw.length, dimmed: isMuted,
           groupAccent: colors.accent, groupBorderColor: colors.border,
@@ -567,11 +585,14 @@ export default function BomExplorer() {
         zIndex: 0,
         style: {
           width:  groupContentWidth + GROUP_PAD_X * 2,
-          height: maxY - (busY - GROUP_PAD_TOP) + GROUP_PAD_BOTTOM,
+          height: (maxY - minY) + GROUP_PAD_TOP + GROUP_PAD_BOTTOM,
         },
       });
 
-      cursorX += groupContentWidth + GROUP_PAD_X * 2 + GROUP_COLUMN_GAP;
+      // Only advance cursor for active (non-muted) groups
+      if (!isMuted) {
+        cursorX += groupContentWidth + GROUP_PAD_X * 2 + GROUP_COLUMN_GAP;
+      }
     }
 
     if (rootNode) {
@@ -585,6 +606,7 @@ export default function BomExplorer() {
         mrpController: rootMrpLabel, materialType: rootMaterialType,
       };
 
+      // Root MRP group container
       groupNodes.push({
         id: `mrp:root:${rootMrpLabel}`, type: "mrpGroup",
         position: { x: rootNode.position.x - GROUP_PAD_X, y: rootNode.position.y - GROUP_PAD_TOP },
@@ -598,17 +620,28 @@ export default function BomExplorer() {
         style: { width: NODE_W + GROUP_PAD_X * 2, height: NODE_H + GROUP_PAD_TOP + GROUP_PAD_BOTTOM },
       });
 
-      // Root → bus edges (one per MRP group)
-      for (const [mrp] of sortedGroups) {
-        const busId = `bus:${mrp}`;
-        const edgeKey = `${effectiveRootId}->${busId}`;
-        if (!edgeSeen.has(edgeKey)) {
-          edgeSeen.add(edgeKey);
-          edgeList.push({
-            id: edgeKey, source: effectiveRootId, target: busId, type: "bomEdge",
-            data: { edgeType: "root-bus", mrp },
-          });
-        }
+    }
+
+    // Parent -> component flow edges (actual BOM connections)
+    for (const item of items) {
+      const sourceId = item.parent;
+      const targetId = item.component;
+      if (!visibleIds.has(sourceId) || !visibleIds.has(targetId)) continue;
+
+      const sourceMrp = getMrpLabel(nodeMap.get(sourceId)?.data?.mrpController);
+      const targetMrp = getMrpLabel(nodeMap.get(targetId)?.data?.mrpController ?? item.mrpController);
+      const isMuted = inactiveMrps.includes(sourceMrp) || inactiveMrps.includes(targetMrp);
+
+      const edgeKey = `flow:${sourceId}->${targetId}`;
+      if (!edgeSeen.has(edgeKey)) {
+        edgeSeen.add(edgeKey);
+        edgeList.push({
+          id: edgeKey,
+          source: sourceId,
+          target: targetId,
+          type: "bomEdge",
+          data: { edgeType: "material-flow", sourceMrp, targetMrp, isMuted },
+        });
       }
     }
 
@@ -618,19 +651,30 @@ export default function BomExplorer() {
       const edgeType = String(edgeData.edgeType ?? "bus-material");
       const mrpKey   = String(edgeData.mrp ?? "");
       const mrpColors = colorByLabel.get(mrpKey) ?? getColorForGroup(0);
-      const isMuted   = Boolean(edgeData.isMuted) || inactiveMrps.includes(mrpKey);
 
+      const flowSourceMrp = String(edgeData.sourceMrp ?? "");
+      const flowTargetMrp = String(edgeData.targetMrp ?? "");
+      const flowMuted = inactiveMrps.includes(flowSourceMrp) || inactiveMrps.includes(flowTargetMrp);
+
+      const isMuted = edgeType === "material-flow"
+        ? (Boolean(edgeData.isMuted) || flowMuted)
+        : (Boolean(edgeData.isMuted) || inactiveMrps.includes(mrpKey));
+
+      const isMaterialFlow = edgeType === "material-flow";
+      const flowColor = colorByLabel.get(flowTargetMrp)?.accent ?? "#1f2937";
       const color = isMuted ? "#4b4f62"
-        : edgeType === "root-bus" ? "var(--accent)"
+        : isMaterialFlow ? flowColor
         : mrpColors.accent;
 
       return {
         ...edge,
-        animated: !isMuted && edgeType === "root-bus",
+        animated: !isMuted && isMaterialFlow,
         style: {
           stroke: color,
-          strokeWidth: isMuted ? 1.25 : edgeType === "root-bus" ? 2.0 : 1.5,
-          opacity: isMuted ? 0.24 : 0.85,
+          strokeWidth: isMuted ? 1.25 : isMaterialFlow ? 1.8 : 1.5,
+          opacity: isMuted ? 0.24 : isMaterialFlow ? 0.72 : 0.85,
+          strokeDasharray: isMaterialFlow ? "4 4" : undefined,
+          strokeLinecap: isMaterialFlow ? "round" : undefined,
         },
         markerEnd: { type: MarkerType.ArrowClosed, color },
       };
@@ -650,16 +694,14 @@ export default function BomExplorer() {
 
   useEffect(() => {
     setInactiveMrps((prev) => {
-      const labels = new Set(mrpLegend.map((entry) => entry.label));
-      const next = prev.filter((label) => labels.has(label));
+      const labels = new Set(mrpLegend.map((e) => e.label));
+      const next = prev.filter((l) => labels.has(l));
       return next.length === prev.length ? prev : next;
     });
   }, [mrpLegend]);
 
   const toggleMrp = useCallback((label: string) => {
-    setInactiveMrps((prev) => (
-      prev.includes(label) ? prev.filter((v) => v !== label) : [...prev, label]
-    ));
+    setInactiveMrps((prev) => prev.includes(label) ? prev.filter((v) => v !== label) : [...prev, label]);
   }, []);
 
   const commit = useCallback(() => {
@@ -673,19 +715,18 @@ export default function BomExplorer() {
   const handleNodeClick = useCallback((_: unknown, node: Node) => {
     if (node.type !== "bomNode") return;
     const d = node.data as Record<string, unknown>;
-    if (selectedNode?.id === node.id) {
-      setSelectedNode(null);
-      return;
-    }
+    if (selectedNode?.id === node.id) { setSelectedNode(null); return; }
     setSelectedNode({
       id:              node.id,
-      description:     d.description as string | null ?? null,
+      description:     d.description  as string | null ?? null,
       materialType:    d.materialType as string | null ?? null,
       mrpController:   d.mrpController as string | null ?? null,
       requiredQty:     Number(d.requiredQty ?? 0),
+      actualRequiredQty: Number(d.actualRequiredQty ?? d.requiredQty ?? 0),
+      scrapRatePct:    Number(d.scrapRatePct ?? 0),
       requiredUnit:    String(d.requiredUnit ?? ""),
       totalMachineMin: Number(d.totalMachineMin ?? 0),
-      totalLaborMin:   Number(d.totalLaborMin ?? 0),
+      totalLaborMin:   Number(d.totalLaborMin   ?? 0),
     });
   }, [selectedNode]);
 
@@ -704,33 +745,18 @@ export default function BomExplorer() {
           <button className="btn btn-primary" onClick={commit}>Load</button>
           <div className="depth-slider">
             <span style={{ fontSize: ".8rem", color: "var(--text-muted)" }}>Depth:</span>
-            <input
-              type="range"
-              min={1} max={15} value={depth}
-              onChange={(e) => setDepth(Number(e.target.value))}
-            />
+            <input type="range" min={1} max={15} value={depth} onChange={(e) => setDepth(Number(e.target.value))} />
             <span style={{ fontWeight: 700, color: "var(--accent)" }}>{depth}</span>
           </div>
-          <button
-            className="btn btn-ghost"
-            onClick={() => setViewMode(viewMode === "graph" ? "table" : "graph")}
-          >
+          <button className="btn btn-ghost" onClick={() => setViewMode(viewMode === "graph" ? "table" : "graph")}>
             {viewMode === "graph" ? "Table View" : "Graph View"}
           </button>
         </div>
         {committed && (
           <div style={{ marginTop: ".65rem", fontSize: ".82rem", color: "var(--text-muted)", display: "flex", gap: "1.2rem", flexWrap: "wrap" }}>
-            <span>
-              Description: <strong style={{ color: "var(--text)" }}>{rootMaterialDescription}</strong>
-            </span>
-            <span>
-              MRP: <strong style={{ color: "var(--text)" }}>{rootMrpLabel}</strong>
-            </span>
-            {items.length > 0 && (
-              <span>
-                {items.length} rows · click a node to see time details
-              </span>
-            )}
+            <span>Description: <strong style={{ color: "var(--text)" }}>{rootMaterialDescription}</strong></span>
+            <span>MRP: <strong style={{ color: "var(--text)" }}>{rootMrpLabel}</strong></span>
+            {items.length > 0 && <span>{items.length} rows · click a node to see time details</span>}
           </div>
         )}
       </div>
@@ -770,14 +796,12 @@ export default function BomExplorer() {
                       outline: "none", boxShadow: "none", appearance: "none", WebkitAppearance: "none",
                     }}
                   >
-                    <span
-                      style={{
-                        width: 10, height: 10, borderRadius: 999,
-                        background: entry.active ? entry.color : "#4b4f62",
-                        boxShadow: `0 0 0 1px ${entry.active ? `${entry.color}66` : "#4b4f6299"}`,
-                        display: "inline-block",
-                      }}
-                    />
+                    <span style={{
+                      width: 10, height: 10, borderRadius: 999,
+                      background: entry.active ? entry.color : "#4b4f62",
+                      boxShadow: `0 0 0 1px ${entry.active ? `${entry.color}66` : "#4b4f6299"}`,
+                      display: "inline-block",
+                    }} />
                     <strong style={{ color: entry.active ? "var(--text)" : "var(--text-muted)" }}>{entry.label}</strong>
                     <span>({entry.count})</span>
                   </button>
@@ -801,8 +825,7 @@ export default function BomExplorer() {
                 nodeColor={(node) => {
                   const d = node.data as Record<string, unknown>;
                   if (Boolean(d?.dimmed)) return "#4b4f62";
-                  if (node.type === "mrpGroup") return String(d?.groupAccent ?? "#2e3250");
-                  if (node.type === "mrpBus")   return String(d?.accent ?? "var(--accent)");
+                  if (node.type === "mrpGroup")      return String(d?.groupAccent ?? "#2e3250");
                   return String(d?.mrpColor ?? "var(--accent)");
                 }}
                 maskColor="rgba(15,17,23,.7)"
@@ -815,10 +838,7 @@ export default function BomExplorer() {
                 items={items}
                 onClose={() => setSelectedNode(null)}
                 onNavigate={() => navigate(`/materials/${selectedNode.id}`)}
-                onViewScrap={() => {
-                  setScrapChainFor(selectedNode.id);
-                  setSelectedNode(null);
-                }}
+                onViewScrap={() => { setScrapChainFor(selectedNode.id); setSelectedNode(null); }}
               />
             )}
           </div>
@@ -835,7 +855,7 @@ export default function BomExplorer() {
               <thead>
                 <tr>
                   <th>Depth</th><th>Parent</th><th>Component</th><th>Description</th>
-                  <th>Type</th><th>MRP</th><th>Qty/Parent</th><th>Total Qty</th>
+                  <th>Type</th><th>MRP</th><th>Qty/Parent</th><th>Ideal Quantity</th><th>Scrap %</th><th style={{ color: "var(--red)" }}>Actual Quantity</th>
                   <th>Machine/unit (min)</th><th>Machine total (min)</th>
                   <th>Labor/unit (min)</th><th>Labor total (min)</th>
                 </tr>
@@ -852,6 +872,7 @@ export default function BomExplorer() {
                         id: it.component, description: it.description ?? null,
                         materialType: it.materialType ?? null, mrpController: it.mrpController ?? null,
                         requiredQty: it.totalQuantity, requiredUnit: it.unit,
+                        actualRequiredQty: it.adjustedTotalQuantity, scrapRatePct: Number(it.scrapRatePct ?? 0),
                         totalMachineMin: it.totalMachineMin, totalLaborMin: it.totalLaborMin,
                       })}
                     >
@@ -863,6 +884,8 @@ export default function BomExplorer() {
                       <td style={{ fontFamily: "var(--mono)", fontSize: ".78rem" }}>{it.mrpController ?? "—"}</td>
                       <td>{it.qtyPerParent.toFixed(3)}</td>
                       <td>{it.totalQuantity.toFixed(3)}</td>
+                      <td>{(it.scrapRatePct ?? 0).toFixed(2)}%</td>
+                      <td style={{ color: "var(--red)", fontWeight: 700 }}>{it.adjustedTotalQuantity.toFixed(3)}</td>
                       <td>{perUnitMachine > 0 ? perUnitMachine.toFixed(2) : "—"}</td>
                       <td>{it.totalMachineMin > 0 ? it.totalMachineMin.toFixed(2) : "—"}</td>
                       <td>{perUnitLabor   > 0 ? perUnitLabor.toFixed(2)   : "—"}</td>
@@ -876,7 +899,6 @@ export default function BomExplorer() {
         </div>
       )}
 
-      {/* Node detail panel for table view */}
       {selectedNode && viewMode === "table" && (
         <div className="card" style={{ marginTop: "1rem" }}>
           <NodeDetailPanel
@@ -884,15 +906,11 @@ export default function BomExplorer() {
             items={items}
             onClose={() => setSelectedNode(null)}
             onNavigate={() => navigate(`/materials/${selectedNode.id}`)}
-            onViewScrap={() => {
-              setScrapChainFor(selectedNode.id);
-              setSelectedNode(null);
-            }}
+            onViewScrap={() => { setScrapChainFor(selectedNode.id); setSelectedNode(null); }}
           />
         </div>
       )}
 
-      {/* Scrap chain panel */}
       {scrapChainFor && (
         <ScrapChainPanel materialId={scrapChainFor} onClose={() => setScrapChainFor(null)} />
       )}

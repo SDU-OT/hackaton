@@ -31,6 +31,8 @@ export interface BomItem {
   quantity: number;
   itemCategory: string;
   hasChildren: boolean;
+  scrapRatePct?: number | null;
+  totalScrapCost?: number | null;
 }
 
 export interface BomExplosionItem {
@@ -43,6 +45,8 @@ export interface BomExplosionItem {
   unit: string;
   qtyPerParent: number;
   totalQuantity: number;
+  scrapRatePct?: number | null;
+  adjustedTotalQuantity: number;
   depth: number;
   pathStr: string;
   totalMachineMin: number;
@@ -55,7 +59,7 @@ export interface RoutingOperation {
   description?: string | null;
   wcId?: string | null;
   workCenter?: string | null;
-  ctrlKey?: string | null;
+  crtlKey?: string | null;
   machineMin?: number | null;
   laborMin?: number | null;
   setupMin?: number | null;
@@ -96,6 +100,42 @@ export interface ScrapStat {
   scrapRatePct: number;
   avgStdPrice?: number | null;
   totalScrapCost?: number | null;
+  avgThroughputMin?: number | null;
+}
+
+export interface MonthlyScrapPoint {
+  year: number;
+  month: number;
+  totalOrdered: number;
+  totalScrap: number;
+  confirmedYield?: number | null;
+  scrapRatePct: number;
+  scrapCost: number;
+}
+
+export interface DailyScrapPoint {
+  date: string;
+  totalOrdered: number;
+  totalScrap: number;
+  scrapRatePct: number;
+}
+
+export interface ScrapReasonItem {
+  reason: string;
+  count: number;
+  unitsScrapped: number;
+}
+
+export interface MaterialScrapTimeSeries {
+  availableYears: number[];
+  year?: number | null;
+  totalScrapCost: number;
+  totalScrap: number;
+  totalOrdered: number;
+  scrapRatePct: number;
+  monthlyData: MonthlyScrapPoint[];
+  dailyData: DailyScrapPoint[];
+  scrapReasons: ScrapReasonItem[];
 }
 
 export interface TypeDistribution {

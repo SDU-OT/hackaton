@@ -71,6 +71,8 @@ class BomItem:
     quantity: float
     item_category: str
     has_children: bool
+    scrap_rate_pct: Optional[float]
+    total_scrap_cost: Optional[float]
 
 
 @strawberry.type
@@ -84,6 +86,8 @@ class BomExplosionItem:
     unit: str
     qty_per_parent: float
     total_quantity: float
+    scrap_rate_pct: Optional[float]
+    adjusted_total_quantity: float
     depth: int
     path_str: str
     total_machine_min: float
@@ -141,6 +145,46 @@ class ScrapStat:
     scrap_rate_pct: float
     avg_std_price: Optional[float]
     total_scrap_cost: Optional[float]
+    avg_throughput_min: Optional[float]
+
+
+@strawberry.type
+class MonthlyScrapPoint:
+    year: int
+    month: int
+    total_ordered: int
+    total_scrap: int
+    confirmed_yield: int
+    scrap_rate_pct: float
+    scrap_cost: float
+
+
+@strawberry.type
+class DailyScrapPoint:
+    date: str
+    total_ordered: int
+    total_scrap: int
+    scrap_rate_pct: float
+
+
+@strawberry.type
+class ScrapReasonItem:
+    reason: str
+    count: int
+    units_scrapped: float
+
+
+@strawberry.type
+class MaterialScrapTimeSeries:
+    available_years: List[int]
+    year: Optional[int]
+    total_scrap_cost: float
+    total_scrap: int
+    total_ordered: int
+    scrap_rate_pct: float
+    monthly_data: List[MonthlyScrapPoint]
+    daily_data: List[DailyScrapPoint]
+    scrap_reasons: List[ScrapReasonItem]
 
 
 @strawberry.type
@@ -375,6 +419,27 @@ class Query:
     def material_scrap(self, material_id: str) -> Optional[ScrapStat]:
         r = scrap_res.get_material_scrap(material_id)
         return _to_scrap_stat(r) if r else None
+
+    @strawberry.field
+    def material_scrap_time_series(
+        self,
+        material_id: str,
+        year: Optional[int] = None,
+    ) -> Optional[MaterialScrapTimeSeries]:
+        d = scrap_res.get_material_scrap_time_series(material_id, year)
+        if d is None:
+            return None
+        return MaterialScrapTimeSeries(
+            available_years=d["available_years"],
+            year=d["year"],
+            total_scrap_cost=d["total_scrap_cost"],
+            total_scrap=d["total_scrap"],
+            total_ordered=d["total_ordered"],
+            scrap_rate_pct=d["scrap_rate_pct"],
+            monthly_data=[MonthlyScrapPoint(**m) for m in d["monthly_data"]],
+            daily_data=[DailyScrapPoint(**m) for m in d["daily_data"]],
+            scrap_reasons=[ScrapReasonItem(**m) for m in d["scrap_reasons"]],
+        )
 
     @strawberry.field
     def dashboard_stats(self) -> DashboardStats:

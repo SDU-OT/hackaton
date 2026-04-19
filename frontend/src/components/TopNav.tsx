@@ -18,7 +18,7 @@ export default function TopNav() {
           to="/materials"
           className={({ isActive }) => `topnav-link${isActive ? " active" : ""}`}
         >
-          Materials
+          Material Details
         </NavLink>
         <NavLink
           to="/data"

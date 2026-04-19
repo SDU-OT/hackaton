@@ -67,6 +67,8 @@ export const GET_BOM_CHILDREN = gql`
       quantity
       itemCategory
       hasChildren
+      scrapRatePct
+      totalScrapCost
     }
   }
 `;
@@ -83,6 +85,8 @@ export const GET_BOM_EXPLOSION = gql`
       unit
       qtyPerParent
       totalQuantity
+      scrapRatePct
+      adjustedTotalQuantity
       depth
       pathStr
       totalMachineMin
@@ -98,7 +102,7 @@ export const GET_ROUTING = gql`
       description
       wcId
       workCenter
-      ctrlKey
+      crtlKey
       machineMin
       laborMin
       setupMin
@@ -306,6 +310,40 @@ export const GET_MATERIAL_SCRAP = gql`
       scrapRatePct
       avgStdPrice
       totalScrapCost
+      avgThroughputMin
+    }
+  }
+`;
+
+export const GET_MATERIAL_SCRAP_TIME_SERIES = gql`
+  query GetMaterialScrapTimeSeries($materialId: String!, $year: Int) {
+    materialScrapTimeSeries(materialId: $materialId, year: $year) {
+      availableYears
+      year
+      totalScrapCost
+      totalScrap
+      totalOrdered
+      scrapRatePct
+      monthlyData {
+        year
+        month
+        totalOrdered
+        totalScrap
+        confirmedYield
+        scrapRatePct
+        scrapCost
+      }
+      dailyData {
+        date
+        totalOrdered
+        totalScrap
+        scrapRatePct
+      }
+      scrapReasons {
+        reason
+        count
+        unitsScrapped
+      }
     }
   }
 `;

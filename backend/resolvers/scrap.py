@@ -1,3 +1,4 @@
+from typing import Optional
 from db import query
 from resolvers import bom as bom_res
 
@@ -18,6 +19,12 @@ _SCRAP_SELECT = """
     LEFT JOIN material_master mm2 ON mm2.material = s.material_norm AND mm.material IS NULL
 """
 
+# DuckDB expression to parse SAP YYYYMMDD date strings (falls back to ISO)
+_DATE_EXPR = """COALESCE(
+    TRY_STRPTIME(CAST(issue_date AS VARCHAR), '%Y%m%d'),
+    TRY_CAST(issue_date AS DATE)
+)"""
+
 
 def get_scrap_stats(limit: int = 100, offset: int = 0):
     rows = query(f"""
@@ -30,18 +37,166 @@ def get_scrap_stats(limit: int = 100, offset: int = 0):
 
 
 def get_material_scrap(material_id: str):
-    rows = query(f"""
-        {_SCRAP_SELECT}
+    """Single-material scrap stats including avg throughput from routing_agg."""
+    rows = query("""
+        SELECT
+            s.material,
+            COALESCE(mm.description, mm2.description) AS description,
+            COALESCE(mm.material_type, mm2.material_type) AS material_type,
+            CAST(s.total_ordered   AS BIGINT) AS total_ordered,
+            CAST(s.total_scrap     AS BIGINT) AS total_scrap,
+            CAST(s.total_delivered AS BIGINT) AS total_delivered,
+            s.scrap_rate_pct,
+            s.avg_std_price,
+            s.total_scrap_cost,
+            (COALESCE(ra.total_machine_min, 0) + COALESCE(ra.total_labor_min, 0))
+                / NULLIF(ra.op_count, 0) AS avg_throughput_min
+        FROM scrap_agg s
+        LEFT JOIN material_master mm  ON mm.material = s.material
+        LEFT JOIN material_master mm2 ON mm2.material = s.material_norm AND mm.material IS NULL
+        LEFT JOIN routing_agg ra      ON ra.material_norm = s.material_norm
         WHERE s.material = LTRIM(?, '0') OR s.material = ?
         LIMIT 1
     """, [material_id, material_id])
     if not rows:
         return None
-    return _row(rows[0])
+    return _row_extended(rows[0])
 
 
 def get_scrap_chain(material_id: str):
     return bom_res.get_scrap_chain(material_id)
+
+
+def get_material_scrap_time_series(material_id: str, year: Optional[int] = None):
+    """Return monthly/daily scrap breakdowns and failure reasons for a material."""
+    mid  = (material_id or "").strip()
+    norm = mid.lstrip("0") or "0"
+
+    # Resolve to the canonical material ID in scrap_records
+    id_rows = query(
+        "SELECT DISTINCT material FROM scrap_records WHERE material = ? OR material = ? LIMIT 1",
+        [mid, norm],
+    )
+    if not id_rows:
+        return None
+    resolved = str(id_rows[0][0])
+
+    # Available years
+    year_rows = query(f"""
+        SELECT DISTINCT YEAR({_DATE_EXPR}) AS yr
+        FROM scrap_records
+        WHERE material = ? AND {_DATE_EXPR} IS NOT NULL
+        ORDER BY yr
+    """, [resolved])
+    available_years = [int(r[0]) for r in year_rows if r[0] is not None]
+
+    selected_year = year if (year and year in available_years) else (available_years[-1] if available_years else None)
+
+    year_filter = f"AND YEAR({_DATE_EXPR}) = ?" if selected_year is not None else ""
+    base_params = [resolved] + ([selected_year] if selected_year is not None else [])
+
+    # Year / all-time summary
+    summary_rows = query(f"""
+        SELECT
+            SUM(COALESCE(scrap_cost,      0)) AS total_scrap_cost,
+            SUM(COALESCE(scrap_qty_final, 0)) AS total_scrap,
+            SUM(COALESCE(operation_qty,   0)) AS total_ordered,
+            CASE WHEN SUM(COALESCE(operation_qty, 0)) > 0
+                 THEN 100.0 * SUM(COALESCE(scrap_qty_final, 0))::DOUBLE
+                      / SUM(COALESCE(operation_qty, 0))
+                 ELSE 0.0 END AS scrap_rate_pct
+        FROM scrap_records
+        WHERE material = ? {year_filter}
+    """, base_params)
+    s = summary_rows[0] if summary_rows else (0, 0, 0, 0.0)
+
+    # Monthly aggregates
+    monthly_rows = query(f"""
+        SELECT
+            YEAR({_DATE_EXPR})               AS yr,
+            MONTH({_DATE_EXPR})              AS mo,
+            SUM(COALESCE(operation_qty,   0)) AS total_ordered,
+            SUM(COALESCE(scrap_qty_final, 0)) AS total_scrap,
+            SUM(COALESCE(confirmed_yield, 0)) AS confirmed_yield,
+            CASE WHEN SUM(COALESCE(operation_qty, 0)) > 0
+                 THEN 100.0 * SUM(COALESCE(scrap_qty_final, 0))::DOUBLE
+                      / SUM(COALESCE(operation_qty, 0))
+                 ELSE 0.0 END AS scrap_rate_pct,
+            SUM(COALESCE(scrap_cost, 0))     AS scrap_cost
+        FROM scrap_records
+        WHERE material = ? {year_filter}
+          AND {_DATE_EXPR} IS NOT NULL
+        GROUP BY yr, mo
+        ORDER BY yr, mo
+    """, base_params)
+
+    # Daily aggregates (for throughput-vs-scrap-rate chart)
+    daily_rows = query(f"""
+        SELECT
+            CAST({_DATE_EXPR} AS VARCHAR)    AS dt,
+            SUM(COALESCE(operation_qty,   0)) AS total_ordered,
+            SUM(COALESCE(scrap_qty_final, 0)) AS total_scrap,
+            CASE WHEN SUM(COALESCE(operation_qty, 0)) > 0
+                 THEN 100.0 * SUM(COALESCE(scrap_qty_final, 0))::DOUBLE
+                      / SUM(COALESCE(operation_qty, 0))
+                 ELSE 0.0 END AS scrap_rate_pct
+        FROM scrap_records
+        WHERE material = ? {year_filter}
+          AND {_DATE_EXPR} IS NOT NULL
+        GROUP BY dt
+        ORDER BY dt
+    """, base_params)
+
+    # Failure reasons
+    reason_rows = query(f"""
+        SELECT
+            COALESCE(NULLIF(TRIM(CAST(cause AS VARCHAR)), ''), 'Unknown') AS reason,
+            COUNT(*)                            AS record_count,
+            SUM(COALESCE(scrap_qty_final, 0))  AS units_scrapped
+        FROM scrap_records
+        WHERE material = ? {year_filter}
+        GROUP BY reason
+        ORDER BY units_scrapped DESC
+        LIMIT 20
+    """, base_params)
+
+    return {
+        "available_years": available_years,
+        "year": selected_year,
+        "total_scrap_cost": float(s[0]) if s[0] else 0.0,
+        "total_scrap":      int(s[1])   if s[1] else 0,
+        "total_ordered":    int(s[2])   if s[2] else 0,
+        "scrap_rate_pct":   float(s[3]) if s[3] else 0.0,
+        "monthly_data": [
+            {
+                "year":            int(r[0]),
+                "month":           int(r[1]),
+                "total_ordered":   int(r[2])   if r[2] else 0,
+                "total_scrap":     int(r[3])   if r[3] else 0,
+                "confirmed_yield": int(r[4])   if r[4] else 0,
+                "scrap_rate_pct":  float(r[5]) if r[5] else 0.0,
+                "scrap_cost":      float(r[6]) if r[6] else 0.0,
+            }
+            for r in monthly_rows
+        ],
+        "daily_data": [
+            {
+                "date":          str(r[0]),
+                "total_ordered": int(r[1])   if r[1] else 0,
+                "total_scrap":   int(r[2])   if r[2] else 0,
+                "scrap_rate_pct": float(r[3]) if r[3] else 0.0,
+            }
+            for r in daily_rows
+        ],
+        "scrap_reasons": [
+            {
+                "reason":         str(r[0]),
+                "count":          int(r[1])   if r[1] else 0,
+                "units_scrapped": float(r[2]) if r[2] else 0.0,
+            }
+            for r in reason_rows
+        ],
+    }
 
 
 def get_aggregate_scrap_sankey():
@@ -51,7 +206,6 @@ def get_aggregate_scrap_sankey():
     its total_scrap.  Parent→child flows are summed across all scrapped materials.
     Returns {nodes: [...], links: [...]} for Recharts Sankey.
     """
-    # Get all materials with recorded scrap
     scrap_rows = query("""
         SELECT material, material_norm, total_scrap
         FROM scrap_agg
@@ -63,15 +217,14 @@ def get_aggregate_scrap_sankey():
     if not scrap_rows:
         return {"nodes": [], "links": []}
 
-    link_map: dict = {}  # (source, target) -> value
-    node_labels: dict = {}  # material_id -> label
+    link_map: dict = {}
+    node_labels: dict = {}
 
     for material, material_norm, total_scrap in scrap_rows:
         total_scrap = float(total_scrap) if total_scrap else 0.0
         if total_scrap <= 0:
             continue
 
-        # Get description for the scrapped material
         mm = query("""
             SELECT description FROM material_master
             WHERE material = ? OR LTRIM(material,'0') = ?
@@ -80,7 +233,6 @@ def get_aggregate_scrap_sankey():
         label = (str(mm[0][0]) if mm and mm[0][0] else material)[:40]
         node_labels[material] = label
 
-        # Explode BOM one level (depth=1) for performance; full tree gets too large
         children = query("""
             SELECT b.component, mm.description, b.quantity
             FROM bom b
@@ -98,12 +250,10 @@ def get_aggregate_scrap_sankey():
             key = (material, str(comp))
             link_map[key] = link_map.get(key, 0.0) + wasted
 
-    # Build nodes list (deduplicated)
     node_ids = sorted(node_labels.keys())
     node_index = {nid: i for i, nid in enumerate(node_ids)}
     nodes = [{"id": nid, "label": node_labels[nid], "value": 0.0} for nid in node_ids]
 
-    # Accumulate node values (sum of outgoing flows)
     links = []
     for (source, target), value in link_map.items():
         if source not in node_index or target not in node_index:
@@ -111,11 +261,9 @@ def get_aggregate_scrap_sankey():
         links.append({"source": source, "target": target, "value": round(value, 4)})
         nodes[node_index[source]]["value"] += value
 
-    # Sort links by value desc, keep top 500 for readability
     links.sort(key=lambda l: l["value"], reverse=True)
     links = links[:500]
 
-    # Only keep nodes that appear in the final links
     used = {l["source"] for l in links} | {l["target"] for l in links}
     nodes = [n for n in nodes if n["id"] in used]
 
@@ -124,13 +272,21 @@ def get_aggregate_scrap_sankey():
 
 def _row(r):
     return {
-        "material":         str(r[0])   if r[0] is not None else "",
-        "description":      str(r[1])   if r[1] is not None else None,
-        "material_type":    str(r[2])   if r[2] is not None else None,
-        "total_ordered":    int(r[3])   if r[3] is not None else 0,
-        "total_scrap":      int(r[4])   if r[4] is not None else 0,
-        "total_delivered":  int(r[5])   if r[5] is not None else 0,
-        "scrap_rate_pct":   float(r[6]) if r[6] is not None else 0.0,
-        "avg_std_price":    float(r[7]) if r[7] is not None else None,
-        "total_scrap_cost": float(r[8]) if r[8] is not None else None,
+        "material":           str(r[0])   if r[0] is not None else "",
+        "description":        str(r[1])   if r[1] is not None else None,
+        "material_type":      str(r[2])   if r[2] is not None else None,
+        "total_ordered":      int(r[3])   if r[3] is not None else 0,
+        "total_scrap":        int(r[4])   if r[4] is not None else 0,
+        "total_delivered":    int(r[5])   if r[5] is not None else 0,
+        "scrap_rate_pct":     float(r[6]) if r[6] is not None else 0.0,
+        "avg_std_price":      float(r[7]) if r[7] is not None else None,
+        "total_scrap_cost":   float(r[8]) if r[8] is not None else None,
+        "avg_throughput_min": None,
     }
+
+
+def _row_extended(r):
+    """Like _row() but also reads avg_throughput_min at index 9."""
+    d = _row(r)
+    d["avg_throughput_min"] = float(r[9]) if r[9] is not None else None
+    return d
