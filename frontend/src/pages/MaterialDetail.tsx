@@ -1,16 +1,18 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { useQuery } from "@apollo/client/react";
 import {
   GET_MATERIAL, GET_ROUTING, GET_BOM_CHILDREN,
   GET_MATERIAL_SCRAP, GET_MATERIAL_SCRAP_TIME_SERIES,
+  MATERIAL_CATALOG,
 } from "../graphql/queries";
 import type {
   Material, RoutingOperation, BomItem,
-  MaterialScrapTimeSeries,
+  MaterialScrapTimeSeries, MaterialCatalogRow,
 } from "../graphql/types";
 import TypeBadge from "../components/TypeBadge";
 import ScrapBadge from "../components/ScrapBadge";
+import Pagination from "../components/Pagination";
 import {
   LineChart, Line, BarChart, Bar,
   XAxis, YAxis, Tooltip, CartesianGrid,
@@ -21,7 +23,7 @@ import {
 
 type BomSortCol =
   | "component" | "description" | "materialType"
-  | "quantity"  | "unit"        | "itemCategory"
+  | "quantity"  | "adjustedQuantity" | "unit" | "itemCategory"
   | "hasChildren" | "scrapRatePct" | "totalScrapCost";
 
 // ── Main page ─────────────────────────────────────────────────────────────────
@@ -30,6 +32,10 @@ export default function MaterialDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const materialId = id!;
+
+  // Compare mode
+  const [compareMode, setCompareMode] = useState(false);
+  const [compareId,   setCompareId]   = useState<string | null>(null);
 
   // BOM children sort state
   const [sortBy,  setSortBy]  = useState<BomSortCol>("component");
@@ -75,6 +81,13 @@ export default function MaterialDetail() {
         case "description":    av = a.description ?? "";      bv = b.description ?? "";      break;
         case "materialType":   av = a.materialType ?? "";     bv = b.materialType ?? "";     break;
         case "quantity":       av = a.quantity;               bv = b.quantity;               break;
+        case "adjustedQuantity": {
+          const aScrap = a.scrapRatePct ?? 0;
+          const bScrap = b.scrapRatePct ?? 0;
+          av = a.quantity * (1 + aScrap / 100);
+          bv = b.quantity * (1 + bScrap / 100);
+          break;
+        }
         case "unit":           av = a.unit;                   bv = b.unit;                   break;
         case "itemCategory":   av = a.itemCategory;           bv = b.itemCategory;           break;
         case "hasChildren":    av = a.hasChildren ? 1 : 0;    bv = b.hasChildren ? 1 : 0;    break;
@@ -127,12 +140,50 @@ export default function MaterialDetail() {
 
   // ── Render ──────────────────────────────────────────────────────────────────
 
+  if (compareMode) {
+    return (
+      <>
+        <div className="page-header">
+          <button className="btn btn-ghost" onClick={() => navigate(-1)}>← Back</button>
+          <h1 style={{ fontFamily: "var(--mono)", fontSize: "1.3rem" }}>{mat.material}</h1>
+          <TypeBadge type={mat.materialType} />
+          <button
+            className="btn btn-secondary"
+            style={{ marginLeft: "auto" }}
+            onClick={() => { setCompareMode(false); setCompareId(null); }}
+          >
+            ✕ Exit Compare
+          </button>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1.25rem", padding: "0 2rem" }}>
+          <div style={{ minWidth: 0, height: "calc(100vh - 180px)", overflowY: "auto", paddingRight: 4 }}>
+            <MaterialCompareColumn materialId={materialId} />
+          </div>
+          <div style={{ minWidth: 0, height: "calc(100vh - 180px)", overflowY: "auto", paddingRight: 4 }}>
+            {compareId
+              ? <MaterialCompareColumn materialId={compareId} onClear={() => setCompareId(null)} />
+              : <CompareSearchBox exclude={materialId} onSelect={setCompareId} />
+            }
+          </div>
+        </div>
+      </>
+    );
+  }
+
   return (
     <>
       <div className="page-header">
         <button className="btn btn-ghost" onClick={() => navigate(-1)}>← Back</button>
         <h1 style={{ fontFamily: "var(--mono)", fontSize: "1.3rem" }}>{mat.material}</h1>
         <TypeBadge type={mat.materialType} />
+        <button
+          className="btn btn-secondary"
+          style={{ marginLeft: "auto" }}
+          onClick={() => setCompareMode(true)}
+          title="Compare this material side by side with another"
+        >
+          ⇄ Compare
+        </button>
       </div>
 
       {/* Overview card — static fields + scrap stats */}
@@ -175,7 +226,8 @@ export default function MaterialDetail() {
                   <SortTh col="component"      label="Component"   active={sortBy} dir={sortDir} onClick={handleBomSort} />
                   <SortTh col="description"    label="Description" active={sortBy} dir={sortDir} onClick={handleBomSort} />
                   <SortTh col="materialType"   label="Type"        active={sortBy} dir={sortDir} onClick={handleBomSort} />
-                  <SortTh col="quantity"       label="Qty"         active={sortBy} dir={sortDir} onClick={handleBomSort} />
+                  <SortTh col="quantity"         label="Ideal Qty"   active={sortBy} dir={sortDir} onClick={handleBomSort} />
+                  <SortTh col="adjustedQuantity" label="Actual Qty"  active={sortBy} dir={sortDir} onClick={handleBomSort} />
                   <SortTh col="unit"           label="Unit"        active={sortBy} dir={sortDir} onClick={handleBomSort} />
                   <SortTh col="itemCategory"   label="Cat"         active={sortBy} dir={sortDir} onClick={handleBomSort} />
                   <SortTh col="hasChildren"    label="Has BOM"     active={sortBy} dir={sortDir} onClick={handleBomSort} />
@@ -190,6 +242,17 @@ export default function MaterialDetail() {
                     <td title={c.description ?? ""}>{c.description ?? "—"}</td>
                     <td><TypeBadge type={c.materialType} /></td>
                     <td>{c.quantity.toFixed(3)}</td>
+                    {(() => {
+                      const actualQty = c.quantity * (1 + (c.scrapRatePct ?? 0) / 100);
+                      const isHigher = actualQty > c.quantity;
+                      return (
+                        <td style={isHigher ? { color: "var(--red)", fontWeight: 600 } : undefined}>
+                          {isHigher
+                            ? `${actualQty.toFixed(3)} (${c.scrapRatePct!.toFixed(1)}% scrap)`
+                            : c.quantity.toFixed(3)}
+                        </td>
+                      );
+                    })()}
                     <td>{c.unit}</td>
                     <td>{c.itemCategory}</td>
                     <td>{c.hasChildren ? "✓" : ""}</td>
@@ -247,6 +310,298 @@ export default function MaterialDetail() {
         />
       )}
     </>
+  );
+}
+
+// ── Compare: search box ───────────────────────────────────────────────────────
+
+function fmt(n: number | null | undefined) { return n == null ? "—" : n.toLocaleString("en-US"); }
+function fmtCost(n: number | null | undefined) { return n == null ? "—" : `${n.toLocaleString("da-DK", { maximumFractionDigits: 0 })} kr.`; }
+function fmtTp(n: number | null | undefined) { return n == null ? "—" : `${n.toFixed(1)} min`; }
+
+// Maps frontend column key → backend snake_case column name (same as MaterialBrowser)
+const CATALOG_COL_MAP: Record<string, string> = {
+  material:           "material",
+  description:        "description",
+  mrpController:      "mrp_controller",
+  materialType:       "material_type",
+  totalOrdered:       "total_ordered",
+  totalUnitsProduced: "total_units_produced",
+  avgThroughputMin:   "avg_throughput_min",
+  scrapRatePct:       "scrap_rate_pct",
+  totalScrapCost:     "total_scrap_cost",
+};
+
+type CatalogSortCol = keyof typeof CATALOG_COL_MAP;
+
+const COMPARE_PAGE_SIZE = 15;
+
+function CompareSearchBox({ exclude, onSelect }: { exclude: string; onSelect: (id: string) => void }) {
+  const [query, setQuery] = useState("");
+  const [debounced, setDebounced] = useState("");
+  const [sortCol, setSortCol] = useState<CatalogSortCol>("material");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const [offset, setOffset] = useState(0);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => { setDebounced(query); setOffset(0); }, 280);
+    return () => { if (timerRef.current) clearTimeout(timerRef.current); };
+  }, [query]);
+
+  const { data, loading } = useQuery<{ materialCatalog: { rows: MaterialCatalogRow[]; total: number } }>(MATERIAL_CATALOG, {
+    variables: {
+      query: debounced,
+      limit: COMPARE_PAGE_SIZE,
+      offset,
+      sortBy: CATALOG_COL_MAP[sortCol],
+      sortDir,
+      minUnitsProduced: 1,
+    },
+  });
+
+  const handleSort = (col: CatalogSortCol) => {
+    if (col === sortCol) setSortDir(d => d === "asc" ? "desc" : "asc");
+    else { setSortCol(col); setSortDir("asc"); }
+    setOffset(0);
+  };
+
+  const rows = (data?.materialCatalog.rows ?? []).filter(r => r.material !== exclude);
+  const total = data?.materialCatalog.total ?? 0;
+
+  const Th = ({ col, label, numeric }: { col: CatalogSortCol; label: string; numeric?: boolean }) => (
+    <th className={numeric ? "num" : undefined} style={{ userSelect: "none", whiteSpace: "nowrap", cursor: "pointer" }} onClick={() => handleSort(col)}>
+      <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+        {label}
+        <span style={{ fontSize: 10, opacity: sortCol === col ? 1 : 0.25 }}>
+          {sortCol === col && sortDir === "desc" ? "▼" : "▲"}
+        </span>
+      </span>
+    </th>
+  );
+
+  return (
+    <div className="card" style={{ minHeight: 260 }}>
+      <h3 style={{ marginBottom: ".75rem", fontSize: "1rem" }}>Select a material to compare</h3>
+
+      <div className="search-wrap" style={{ marginBottom: ".75rem" }}>
+        <span className="search-icon">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+          </svg>
+        </span>
+        <input
+          autoFocus
+          className="search-input"
+          placeholder="Search by material ID or description…"
+          value={query}
+          onChange={e => setQuery(e.target.value)}
+        />
+      </div>
+
+      {loading && <div style={{ fontSize: ".8rem", color: "var(--text-secondary)" }}>Searching…</div>}
+
+      {rows.length > 0 && (
+        <div className="data-table-wrap" style={{ overflowX: "auto" }}>
+          <table className="data-table">
+            <thead>
+              <tr>
+                <Th col="material"          label="Material ID" />
+                <Th col="description"       label="Description" />
+                <Th col="mrpController"     label="MRP" />
+                <Th col="materialType"      label="Type" />
+                <Th col="totalOrdered"      label="Total Orders"    numeric />
+                <Th col="totalUnitsProduced" label="Units Produced" numeric />
+                <Th col="avgThroughputMin"  label="Avg Throughput"  numeric />
+                <Th col="scrapRatePct"      label="Scrap Rate"      numeric />
+                <Th col="totalScrapCost"    label="Scrap Cost"      numeric />
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map(r => (
+                <tr key={r.material} className="clickable" onClick={() => onSelect(r.material)}>
+                  <td className="mono">{r.material}</td>
+                  <td className="trunc" title={r.description ?? ""}>{r.description ?? "—"}</td>
+                  <td>{r.mrpController ?? "—"}</td>
+                  <td><TypeBadge type={r.materialType} /></td>
+                  <td className="num">{fmt(r.totalOrdered)}</td>
+                  <td className="num">{fmt(r.totalUnitsProduced)}</td>
+                  <td className="num">{fmtTp(r.avgThroughputMin)}</td>
+                  <td className="num">{r.scrapRatePct != null ? <ScrapBadge pct={r.scrapRatePct} /> : "—"}</td>
+                  <td className="num">{fmtCost(r.totalScrapCost)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {rows.length > 0 && (
+        <Pagination offset={offset} pageSize={COMPARE_PAGE_SIZE} total={total} onPage={setOffset} />
+      )}
+
+      {debounced.length > 0 && !loading && rows.length === 0 && (
+        <div style={{ fontSize: ".8rem", color: "var(--text-secondary)" }}>No results found.</div>
+      )}
+    </div>
+  );
+}
+
+// ── Compare: material column ──────────────────────────────────────────────────
+
+function MaterialCompareColumn({ materialId, onClear }: { materialId: string; onClear?: () => void }) {
+  const [scrapYear, setScrapYear] = useState<number | null>(null);
+
+  const { data: mData, loading: mLoad } = useQuery<{ material: Material | null }>(GET_MATERIAL, { variables: { materialId } });
+  const { data: bData } = useQuery<{ bomChildren: BomItem[] }>(GET_BOM_CHILDREN, { variables: { materialId } });
+  const { data: rData } = useQuery<{ routing: RoutingOperation[] }>(GET_ROUTING, { variables: { materialId } });
+  const { data: scrapData } = useQuery<{
+    materialScrap: { totalOrdered: number; totalScrap: number; totalDelivered: number; scrapRatePct: number; totalScrapCost?: number | null; avgThroughputMin?: number | null } | null;
+  }>(GET_MATERIAL_SCRAP, { variables: { materialId } });
+  const { data: tsData } = useQuery<{ materialScrapTimeSeries: MaterialScrapTimeSeries | null }>(
+    GET_MATERIAL_SCRAP_TIME_SERIES,
+    { variables: { materialId, year: scrapYear ?? undefined } },
+  );
+
+  if (mLoad) return <div className="card"><div className="spinner">Loading…</div></div>;
+  const mat = mData?.material;
+  if (!mat) return <div className="card" style={{ color: "var(--red)" }}>Material not found.</div>;
+
+  const children = bData?.bomChildren ?? [];
+  const ops      = rData?.routing ?? [];
+  const scrap    = scrapData?.materialScrap;
+  const ts       = tsData?.materialScrapTimeSeries;
+  const totalMachine = ops.reduce((s, o) => s + (o.machineMin ?? 0), 0);
+  const totalLabor   = ops.reduce((s, o) => s + (o.laborMin  ?? 0), 0);
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+      {/* Header */}
+      <div className="card" style={{ paddingBottom: ".75rem" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: ".6rem", marginBottom: ".75rem" }}>
+          <span style={{ fontFamily: "var(--mono)", fontWeight: 700, fontSize: "1.05rem" }}>{mat.material}</span>
+          <TypeBadge type={mat.materialType} />
+          {onClear && (
+            <button
+              className="btn btn-ghost"
+              style={{ marginLeft: "auto", fontSize: ".75rem", padding: ".2rem .6rem" }}
+              onClick={onClear}
+              title="Change comparison material"
+            >
+              ⇄ Change
+            </button>
+          )}
+        </div>
+        <div style={{ display: "flex", gap: "1.25rem", flexWrap: "wrap" }}>
+          <Info label="Description"   value={mat.description} />
+          <Info label="Group"         value={mat.materialGroup} />
+          <Info label="Plant"         value={mat.plant} />
+          <Info label="MRP Controller" value={mat.mrpController} />
+          <Info label="Weight"        value={mat.weightKg != null ? `${mat.weightKg} kg` : undefined} />
+          <Info label="Status"        value={mat.status} />
+          <Info label="Has BOM"       value={mat.hasBom ? "Yes" : "No"} />
+          <Info label="Has Routing"   value={mat.hasRouting ? "Yes" : "No"} />
+        </div>
+      </div>
+
+      {/* Scrap stats */}
+      {scrap && (
+        <div className="card">
+          <h4 style={{ margin: "0 0 .65rem", fontSize: ".85rem", textTransform: "uppercase", letterSpacing: ".05em", color: "var(--text-secondary)" }}>Scrap Stats</h4>
+          <div style={{ display: "flex", gap: "1.25rem", flexWrap: "wrap" }}>
+            <Info label="Total Ordered"  value={scrap.totalOrdered.toLocaleString()} />
+            <Info label="Units Produced" value={scrap.totalDelivered.toLocaleString()} />
+            <Info label="Avg Throughput" value={scrap.avgThroughputMin != null ? `${scrap.avgThroughputMin.toFixed(1)} min` : undefined} />
+            <Info label="Scrap Cost"     value={scrap.totalScrapCost != null ? `${scrap.totalScrapCost.toLocaleString("da-DK", { maximumFractionDigits: 0 })} kr.` : undefined} />
+            <div>
+              <div style={{ fontSize: ".75rem", color: "var(--text-muted)", marginBottom: ".2rem" }}>Scrap Rate</div>
+              <ScrapBadge pct={scrap.scrapRatePct} />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* BOM children */}
+      {mat.hasBom && (
+        <div className="card">
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: ".6rem" }}>
+            <h4 style={{ margin: 0, fontSize: ".85rem", textTransform: "uppercase", letterSpacing: ".05em", color: "var(--text-secondary)" }}>
+              BOM — {children.length} components
+            </h4>
+            <Link to={`/bom/${mat.material}`} className="btn btn-ghost" style={{ fontSize: ".75rem", padding: ".2rem .6rem" }}>
+              Full BOM →
+            </Link>
+          </div>
+          <div className="data-table-wrap" style={{ maxHeight: 220, overflowY: "auto" }}>
+            <table className="data-table" style={{ fontSize: ".78rem" }}>
+              <thead>
+                <tr>
+                  <th>Component</th>
+                  <th>Description</th>
+                  <th style={{ textAlign: "right" }}>Ideal Qty</th>
+                  <th style={{ textAlign: "right" }}>Actual Qty</th>
+                </tr>
+              </thead>
+              <tbody>
+                {children.map(c => {
+                  const actualQty = c.quantity * (1 + (c.scrapRatePct ?? 0) / 100);
+                  const isHigher  = actualQty > c.quantity;
+                  return (
+                    <tr key={c.component}>
+                      <td><code style={{ fontFamily: "var(--mono)", fontSize: ".75rem" }}>{c.component}</code></td>
+                      <td style={{ color: "var(--text-secondary)" }}>{c.description ?? "—"}</td>
+                      <td style={{ textAlign: "right" }}>{c.quantity.toFixed(3)}</td>
+                      <td style={{ textAlign: "right", color: isHigher ? "var(--red)" : undefined, fontWeight: isHigher ? 600 : undefined }}>
+                        {isHigher ? `${actualQty.toFixed(3)} (${c.scrapRatePct!.toFixed(1)}%)` : c.quantity.toFixed(3)}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Routing summary */}
+      {mat.hasRouting && ops.length > 0 && (
+        <div className="card">
+          <h4 style={{ margin: "0 0 .65rem", fontSize: ".85rem", textTransform: "uppercase", letterSpacing: ".05em", color: "var(--text-secondary)" }}>
+            Routing — {ops.length} operations
+          </h4>
+          <div style={{ display: "flex", gap: "1.5rem", marginBottom: ".65rem" }}>
+            <Info label="Total Machine" value={`${totalMachine.toFixed(1)} min`} />
+            <Info label="Total Labor"   value={`${totalLabor.toFixed(1)} min`} />
+          </div>
+          <div className="data-table-wrap" style={{ maxHeight: 160, overflowY: "auto" }}>
+            <table className="data-table" style={{ fontSize: ".78rem" }}>
+              <thead><tr><th>#</th><th>Description</th><th>WC</th><th>Machine</th><th>Labor</th></tr></thead>
+              <tbody>
+                {ops.map((op, i) => (
+                  <tr key={i}>
+                    <td>{op.sequence}</td>
+                    <td>{op.description ?? "—"}</td>
+                    <td style={{ fontFamily: "var(--mono)", fontSize: ".75rem" }}>{op.wcId ?? "—"}</td>
+                    <td>{op.machineMin != null ? <span className="time-pill machine">{op.machineMin.toFixed(1)} min</span> : "—"}</td>
+                    <td>{op.laborMin  != null ? <span className="time-pill labor">{op.laborMin.toFixed(1)} min</span>  : "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Scrap charts */}
+      {ts && (
+        <ScrapInfoPanel
+          data={ts}
+          selectedYear={scrapYear}
+          onYearChange={setScrapYear}
+        />
+      )}
+    </div>
   );
 }
 

@@ -35,6 +35,11 @@ const EMPTY_RANGES: RangeState = {
   maxScrapCost: "",
 };
 
+const DEFAULT_RANGES: RangeState = {
+  ...EMPTY_RANGES,
+  minUnitsProduced: "1",
+};
+
 const TEXT_COLUMNS = [
   { column: "material", label: "Material ID" },
   { column: "description", label: "Description" },
@@ -78,7 +83,7 @@ export default function MaterialBrowser() {
   const [offset, setOffset] = useState(0);
   const [sortCol, setSortCol] = useState("material");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
-  const [ranges, setRanges] = useState<RangeState>({ ...EMPTY_RANGES });
+  const [ranges, setRanges] = useState<RangeState>({ ...DEFAULT_RANGES });
   const [openRangeColumn, setOpenRangeColumn] = useState<RangeColumn | null>(null);
   const rangePopupRef = useRef<HTMLDivElement | null>(null);
   const navigate = useNavigate();
@@ -161,7 +166,7 @@ export default function MaterialBrowser() {
     setMrpSearch("");
     setDateFrom("");
     setDateTo("");
-    setRanges({ ...EMPTY_RANGES });
+    setRanges({ ...DEFAULT_RANGES });
     setOpenRangeColumn(null);
     setOffset(0);
   }, []);
@@ -200,7 +205,10 @@ export default function MaterialBrowser() {
     };
   }, [openRangeColumn]);
 
-  const hasFilters = committed || activeType || activeMrp || dateFrom || dateTo || Object.values(ranges).some(v => v !== "");
+  const hasRangeOverrides = (Object.keys(ranges) as Array<keyof RangeState>).some(
+    key => ranges[key] !== DEFAULT_RANGES[key]
+  );
+  const hasFilters = committed || activeType || activeMrp || dateFrom || dateTo || hasRangeOverrides;
 
   return (
     <div className="materials-layout">

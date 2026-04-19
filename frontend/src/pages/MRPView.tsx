@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@apollo/client/react";
 import {
@@ -53,6 +53,213 @@ function renderMsg(text: string) {
     const nodes = parts.map((p, j) => j % 2 === 1 ? <strong key={j}>{p}</strong> : p);
     return <p key={i} style={{ margin: i === 0 ? 0 : "7px 0 0" }}>{nodes}</p>;
   });
+}
+
+// ── Anomaly detection ─────────────────────────────────────────────────────────
+
+type Severity = "critical" | "warning" | "info";
+interface Anomaly { severity: Severity; title: string; detail: string; }
+
+function detectAnomalies(report: MRPReport): Anomaly[] {
+  const anomalies: Anomaly[] = [];
+  const ts = report.timeSeries;
+
+  // 1. Overall scrap rate too high
+  if (report.scrapRatePct > 10) {
+    anomalies.push({
+      severity: "critical",
+      title: `Scrap rate at ${report.scrapRatePct.toFixed(1)}%`,
+      detail: "Overall scrap exceeds 10%. Every 10th unit produced is being wasted.",
+    });
+  } else if (report.scrapRatePct > 5) {
+    anomalies.push({
+      severity: "warning",
+      title: `Elevated scrap rate (${report.scrapRatePct.toFixed(1)}%)`,
+      detail: "Scrap rate above 5% — worth investigating the top materials below.",
+    });
+  }
+
+  // 2. Month-over-month spike: any month > 2× the period average
+  if (ts.length >= 3) {
+    const avg = ts.reduce((s, m) => s + m.scrapRatePct, 0) / ts.length;
+    const spike = ts.find(m => m.scrapRatePct > avg * 2 && m.scrapRatePct > 5);
+    if (spike) {
+      anomalies.push({
+        severity: "critical",
+        title: `Scrap spike in ${spike.month}`,
+        detail: `${spike.month} hit ${spike.scrapRatePct.toFixed(1)}% scrap — more than double the ${avg.toFixed(1)}% period average.`,
+      });
+    }
+  }
+
+  // 3. Worsening trend: second-half avg scrap rate significantly worse than first half
+  if (ts.length >= 4) {
+    const mid = Math.floor(ts.length / 2);
+    const firstHalf  = ts.slice(0, mid).reduce((s, m) => s + m.scrapRatePct, 0) / mid;
+    const secondHalf = ts.slice(mid).reduce((s, m)  => s + m.scrapRatePct, 0) / (ts.length - mid);
+    if (secondHalf > firstHalf * 1.3 && secondHalf - firstHalf > 2) {
+      anomalies.push({
+        severity: "warning",
+        title: "Scrap rate trending upward",
+        detail: `Scrap worsened from ${firstHalf.toFixed(1)}% (first half) to ${secondHalf.toFixed(1)}% (recent) — a ${(secondHalf - firstHalf).toFixed(1)}pp rise.`,
+      });
+    }
+  }
+
+  // 4. Single material dominates scrap cost (> 50% of total)
+  if (report.topMaterialsByCost.length > 0 && report.totalScrapCost > 0) {
+    const top = report.topMaterialsByCost[0];
+    const share = (top.totalScrapCost / report.totalScrapCost) * 100;
+    if (share > 50) {
+      anomalies.push({
+        severity: "warning",
+        title: `${top.material} drives ${share.toFixed(0)}% of scrap cost`,
+        detail: `One material accounts for over half the total scrap cost (kr. ${fmt(top.totalScrapCost)}). Fixing it would have outsized impact.`,
+      });
+    }
+  }
+
+  // 5. Single work center dominates scrap cost (> 60%)
+  if (report.workCenterScrap.length > 0 && report.totalScrapCost > 0) {
+    const topWc = report.workCenterScrap[0];
+    const share = (topWc.scrapCost / report.totalScrapCost) * 100;
+    if (share > 60) {
+      anomalies.push({
+        severity: "warning",
+        title: `Work center ${topWc.workCenter} is a bottleneck`,
+        detail: `${topWc.workCenter} accounts for ${share.toFixed(0)}% of all scrap cost (kr. ${fmt(topWc.scrapCost)}). Likely a process or tooling issue.`,
+      });
+    }
+  }
+
+  // 6. A material with very high scrap rate AND high volume
+  const highRateHighVol = report.topMaterialsByQty.find(m => m.scrapRatePct > 15 && m.totalQty > 100);
+  if (highRateHighVol) {
+    anomalies.push({
+      severity: "critical",
+      title: `${highRateHighVol.material} has ${highRateHighVol.scrapRatePct.toFixed(1)}% scrap rate`,
+      detail: `High volume (${fmt(highRateHighVol.totalQty)} units) combined with a ${highRateHighVol.scrapRatePct.toFixed(1)}% scrap rate — likely a systemic defect.`,
+    });
+  }
+
+  return anomalies.slice(0, 4); // cap at 4 so the popup stays readable
+}
+
+// ── Anomaly popup ─────────────────────────────────────────────────────────────
+
+const SEVERITY_COLOR: Record<Severity, string> = {
+  critical: "var(--red)",
+  warning:  "#f59e0b",
+  info:     "var(--accent)",
+};
+
+const SEVERITY_ICON: Record<Severity, string> = {
+  critical: "🔴",
+  warning:  "🟡",
+  info:     "🔵",
+};
+
+function AnomalyPopup({ anomalies, onDismiss }: { anomalies: Anomaly[]; onDismiss: () => void }) {
+  const [expanded, setExpanded] = useState<number | null>(null);
+
+  if (anomalies.length === 0) return null;
+
+  const topSeverity: Severity = anomalies.some(a => a.severity === "critical")
+    ? "critical"
+    : anomalies.some(a => a.severity === "warning") ? "warning" : "info";
+
+  return (
+    <div style={{
+      position: "fixed",
+      top: 72,
+      right: 24,
+      width: 320,
+      zIndex: 1000,
+      background: "var(--white)",
+      border: `1.5px solid ${SEVERITY_COLOR[topSeverity]}`,
+      borderRadius: 10,
+      boxShadow: `0 4px 24px rgba(0,0,0,.35), 0 0 0 1px ${SEVERITY_COLOR[topSeverity]}22`,
+      overflow: "hidden",
+      fontFamily: "var(--font-sans, sans-serif)",
+    }}>
+      {/* Header */}
+      <div style={{
+        display: "flex", alignItems: "center", gap: ".5rem",
+        padding: ".6rem .85rem",
+        background: `${SEVERITY_COLOR[topSeverity]}18`,
+        borderBottom: `1px solid ${SEVERITY_COLOR[topSeverity]}33`,
+      }}>
+        <span style={{ fontSize: "1rem" }}>{SEVERITY_ICON[topSeverity]}</span>
+        <span style={{ flex: 1, fontWeight: 700, fontSize: ".82rem", color: SEVERITY_COLOR[topSeverity], letterSpacing: ".03em", textTransform: "uppercase" }}>
+          {anomalies.length} Production {anomalies.length === 1 ? "Anomaly" : "Anomalies"} Detected
+        </span>
+        <button
+          onClick={onDismiss}
+          style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", fontSize: "1rem", lineHeight: 1, padding: "0 2px" }}
+          title="Dismiss"
+        >×</button>
+      </div>
+
+      {/* Anomaly list */}
+      <div style={{ padding: ".4rem 0" }}>
+        {anomalies.map((a, i) => (
+          <div
+            key={i}
+            style={{ borderBottom: i < anomalies.length - 1 ? "1px solid var(--border)" : undefined }}
+          >
+            <button
+              onClick={() => setExpanded(expanded === i ? null : i)}
+              style={{
+                width: "100%", textAlign: "left", background: "none", border: "none",
+                cursor: "pointer", padding: ".55rem .85rem",
+                display: "flex", alignItems: "flex-start", gap: ".5rem",
+              }}
+            >
+              <span style={{ fontSize: ".8rem", marginTop: 1 }}>{SEVERITY_ICON[a.severity]}</span>
+              <span style={{ flex: 1, fontSize: ".8rem", fontWeight: 600, color: "var(--text)", lineHeight: 1.35 }}>
+                {a.title}
+              </span>
+              <span style={{ fontSize: ".65rem", color: "var(--text-muted)", marginTop: 2 }}>
+                {expanded === i ? "▲" : "▼"}
+              </span>
+            </button>
+            {expanded === i && (
+              <div style={{
+                padding: ".1rem .85rem .65rem 2.15rem",
+                fontSize: ".76rem", color: "var(--text-muted)", lineHeight: 1.5,
+              }}>
+                {a.detail}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* Footer hint */}
+      <div style={{
+        padding: ".4rem .85rem",
+        fontSize: ".7rem", color: "var(--text-muted)",
+        borderTop: "1px solid var(--border)",
+        background: "var(--bg-section)",
+      }}>
+        Click an item to expand · Data from selected period
+      </div>
+    </div>
+  );
+}
+
+function MrpSortTh({ label, active, dir, onClick, align }: {
+  label: string; active: boolean; dir: "asc" | "desc";
+  onClick: () => void; align?: "right";
+}) {
+  return (
+    <th style={{ cursor: "pointer", userSelect: "none", whiteSpace: "nowrap", textAlign: align }} onClick={onClick}>
+      {label}{" "}
+      <span style={{ opacity: active ? 1 : 0.3, fontSize: ".7rem" }}>
+        {active ? (dir === "asc" ? "▲" : "▼") : "⇅"}
+      </span>
+    </th>
+  );
 }
 
 function SkrappyMascot() {
@@ -273,6 +480,19 @@ export default function MRPView() {
   const [dateFrom, setDateFrom] = useState<string>(defaultDateFrom());
   const [dateTo, setDateTo]     = useState<string>(defaultDateTo());
 
+  const [showAnomalies, setShowAnomalies] = useState(false);
+  const prevReportMrp = useRef<string | undefined>(undefined);
+
+  type QtyCol  = "material" | "totalQty" | "scrapQty" | "scrapRatePct";
+  type CostCol = "material" | "scrapUnits" | "totalScrapCost";
+  const [qtySortCol,  setQtySortCol]  = useState<QtyCol>("totalQty");
+  const [qtySortDir,  setQtySortDir]  = useState<"asc" | "desc">("desc");
+  const [costSortCol, setCostSortCol] = useState<CostCol>("totalScrapCost");
+  const [costSortDir, setCostSortDir] = useState<"asc" | "desc">("desc");
+
+  const toggleQtySort  = (col: QtyCol)  => { if (qtySortCol  === col) setQtySortDir(d => d === "asc" ? "desc" : "asc"); else { setQtySortCol(col);  setQtySortDir("desc"); } };
+  const toggleCostSort = (col: CostCol) => { if (costSortCol === col) setCostSortDir(d => d === "asc" ? "desc" : "asc"); else { setCostSortCol(col); setCostSortDir("desc"); } };
+
   const { data: ctrlData, loading: ctrlLoading } = useQuery<{
     mrpControllers: string[];
   }>(GET_MRP_CONTROLLERS);
@@ -293,9 +513,43 @@ export default function MRPView() {
   const controllers = ctrlData?.mrpControllers ?? [];
   const report = reportData?.mrpReport;
 
+  useEffect(() => {
+    if (report?.mrpController && report.mrpController !== prevReportMrp.current && report.hasProductionData) {
+      prevReportMrp.current = report.mrpController;
+      setShowAnomalies(true);
+    }
+  }, [report]);
+
+  const anomalies = useMemo(() => report && report.hasProductionData ? detectAnomalies(report) : [], [report]);
+
+  const sortedByQty = useMemo(() => {
+    const rows = [...(report?.topMaterialsByQty ?? [])];
+    rows.sort((a, b) => {
+      const av = qtySortCol === "material" ? a.material : a[qtySortCol];
+      const bv = qtySortCol === "material" ? b.material : b[qtySortCol];
+      const cmp = typeof av === "number" && typeof bv === "number" ? av - bv : String(av).localeCompare(String(bv));
+      return qtySortDir === "asc" ? cmp : -cmp;
+    });
+    return rows;
+  }, [report?.topMaterialsByQty, qtySortCol, qtySortDir]);
+
+  const sortedByCost = useMemo(() => {
+    const rows = [...(report?.topMaterialsByCost ?? [])];
+    rows.sort((a, b) => {
+      const av = costSortCol === "material" ? a.material : a[costSortCol];
+      const bv = costSortCol === "material" ? b.material : b[costSortCol];
+      const cmp = typeof av === "number" && typeof bv === "number" ? av - bv : String(av).localeCompare(String(bv));
+      return costSortDir === "asc" ? cmp : -cmp;
+    });
+    return rows;
+  }, [report?.topMaterialsByCost, costSortCol, costSortDir]);
+
   return (
     <div className="page-inner">
       <h1 className="page-title">MRP Dashboard</h1>
+      {showAnomalies && anomalies.length > 0 && (
+        <AnomalyPopup anomalies={anomalies} onDismiss={() => setShowAnomalies(false)} />
+      )}
 
       <div className="materials-layout">
         {/* Sidebar */}
@@ -431,22 +685,22 @@ export default function MRPView() {
                 </>
               )}
 
-              {report.topMaterialsByQty.length > 0 && (
+              {sortedByQty.length > 0 && (
                 <div className="mrp-chart-section">
                   <h3 className="section-title">Most Used Materials (by Qty)</h3>
                   <div className="data-table-wrap">
                     <table className="data-table">
                       <thead>
                         <tr>
-                          <th>Material</th>
+                          <MrpSortTh label="Material"   active={qtySortCol === "material"}     dir={qtySortDir} onClick={() => toggleQtySort("material")} />
                           <th>Description</th>
-                          <th style={{ textAlign: "right" }}>Total Qty</th>
-                          <th style={{ textAlign: "right" }}>Scrap Qty</th>
-                          <th style={{ textAlign: "right" }}>Scrap Rate</th>
+                          <MrpSortTh label="Total Qty"  active={qtySortCol === "totalQty"}     dir={qtySortDir} onClick={() => toggleQtySort("totalQty")}  align="right" />
+                          <MrpSortTh label="Scrap Qty"  active={qtySortCol === "scrapQty"}     dir={qtySortDir} onClick={() => toggleQtySort("scrapQty")}  align="right" />
+                          <MrpSortTh label="Scrap Rate" active={qtySortCol === "scrapRatePct"} dir={qtySortDir} onClick={() => toggleQtySort("scrapRatePct")} align="right" />
                         </tr>
                       </thead>
                       <tbody>
-                        {report.topMaterialsByQty.map((m) => (
+                        {sortedByQty.map((m) => (
                           <tr key={m.material}>
                             <td><Link to={`/materials/${m.material}`} className="table-link">{m.material}</Link></td>
                             <td className="text-secondary">{m.description ?? "—"}</td>
@@ -464,21 +718,21 @@ export default function MRPView() {
                 </div>
               )}
 
-              {report.topMaterialsByCost.length > 0 && (
+              {sortedByCost.length > 0 && (
                 <div className="mrp-chart-section">
                   <h3 className="section-title">Where Most Money Is Lost (Scrap Cost)</h3>
                   <div className="data-table-wrap">
                     <table className="data-table">
                       <thead>
                         <tr>
-                          <th>Material</th>
+                          <MrpSortTh label="Material"        active={costSortCol === "material"}       dir={costSortDir} onClick={() => toggleCostSort("material")} />
                           <th>Description</th>
-                          <th style={{ textAlign: "right" }}>Scrap Units</th>
-                          <th style={{ textAlign: "right" }}>Total Scrap Cost</th>
+                          <MrpSortTh label="Scrap Units"     active={costSortCol === "scrapUnits"}     dir={costSortDir} onClick={() => toggleCostSort("scrapUnits")}     align="right" />
+                          <MrpSortTh label="Total Scrap Cost" active={costSortCol === "totalScrapCost"} dir={costSortDir} onClick={() => toggleCostSort("totalScrapCost")} align="right" />
                         </tr>
                       </thead>
                       <tbody>
-                        {report.topMaterialsByCost.map((m) => (
+                        {sortedByCost.map((m) => (
                           <tr key={m.material}>
                             <td><Link to={`/materials/${m.material}`} className="table-link">{m.material}</Link></td>
                             <td className="text-secondary">{m.description ?? "—"}</td>
